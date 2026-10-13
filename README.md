@@ -47,8 +47,8 @@ Keep your keystore: later app updates must be signed with the same key.
 |---|---|
 | `module/` | Module scripts; all device values in `config.sh` |
 | `PogoPair/`, `HidCtl/` | Companion app (pairing + latency) and the root `app_process` HID-policy helper |
-| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher) |
-| `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `pad2_vs_pad3.diff` |
+| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher), `gatt_cache_dump.py`, `penprobe/` (Stylo 2 GATT probe) |
+| `docs/` | `STYLO2.md` (Stylo 2 thumb button / haptics research, in progress), `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `pad2_vs_pad3.diff` |
 | `release/` | The build installed on the author's tablet (contains the author's keyboard MAC) |
 
 The docs were written during development and refer to the original working folders: `pad2_module/` →
