@@ -1,0 +1,12 @@
+#!/sbin/sh
+# Standard Magisk module installer stub (KernelSU ignores this and uses its own installer).
+umask 022
+ui_print() { echo "$1"; }
+OUTFD=$2
+ZIPFILE=$3
+mount /data 2>/dev/null
+[ -f /data/adb/magisk/util_functions.sh ] || { ui_print "Install from the Magisk or KernelSU app"; exit 1; }
+. /data/adb/magisk/util_functions.sh
+[ "$MAGISK_VER_CODE" -lt 20400 ] && { ui_print "Magisk v20.4+ required"; exit 1; }
+install_module
+exit 0

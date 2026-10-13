@@ -1,0 +1,1048 @@
+diff -ruN pad3/HidCtl/src/local/codex/pogopair/HidCtl.java pad2/HidCtl/src/local/codex/pogopair/HidCtl.java
+--- pad3/HidCtl/src/local/codex/pogopair/HidCtl.java	2026-10-13 14:16:00.302453563 +0300
++++ pad2/HidCtl/src/local/codex/pogopair/HidCtl.java	2026-10-13 15:08:07.135547210 +0300
+@@ -1,4 +1,4 @@
+-package local.codex.pogopair;
++package local.pad2kbd.pogopair;
+ 
+ import android.bluetooth.BluetoothAdapter;
+ import android.bluetooth.BluetoothDevice;
+@@ -11,15 +11,23 @@
+ import java.lang.reflect.Constructor;
+ import java.lang.reflect.Method;
+ 
++/**
++ * Root helper run via app_process:
++ *   suspend MAC  policy FORBIDDEN + disconnect   (keyboard on the pogo pins)
++ *   resume  MAC  policy ALLOWED + connect        (keyboard detached)
++ *   allow   MAC  policy ALLOWED only             (uninstall)
++ *   status  MAC  print policy, connection and bond state
++ */
+ public final class HidCtl {
+-    private static final String TAG = "PogoPair";
++    private static final String TAG = "pad2kbd";
++    private static final int HID_HOST = 4;
+ 
+     public static void main(String[] args) throws Exception {
+-        if (args.length != 2 || (!"suspend".equals(args[0]) && !"resume".equals(args[0]))) {
+-            System.err.println("usage: HidCtl suspend|resume MAC");
++        final String cmd = args.length == 2 ? args[0] : "";
++        if (!cmd.matches("suspend|resume|allow|status") || !BluetoothAdapter.checkBluetoothAddress(args[1])) {
++            System.err.println("usage: HidCtl suspend|resume|allow|status MAC");
+             System.exit(2);
+         }
+-        final boolean suspend = "suspend".equals(args[0]);
+         Looper.prepareMainLooper();
+         Class<?> atClass = Class.forName("android.app.ActivityThread");
+         Object at = atClass.getMethod("systemMain").invoke(null);
+@@ -30,8 +38,12 @@
+         Class<?> serviceManagerClass = Class.forName("android.os.BluetoothServiceManager");
+         Object serviceManager = serviceManagerClass.getConstructor().newInstance();
+         Class<?> initializerClass = Class.forName("android.bluetooth.BluetoothFrameworkInitializer");
+-        initializerClass.getMethod("setBluetoothServiceManager", serviceManagerClass)
+-                .invoke(null, serviceManager);
++        try {
++            initializerClass.getMethod("setBluetoothServiceManager", serviceManagerClass)
++                    .invoke(null, serviceManager);
++        } catch (java.lang.reflect.InvocationTargetException alreadySet) {
++            // Thrown if the framework already initialized it; harmless.
++        }
+ 
+         // app_process does not initialize BluetoothAdapter's process singleton.
+         // Build the adapter from the system bluetooth_manager binder instead.
+@@ -45,34 +57,51 @@
+         Constructor<BluetoothAdapter> constructor = BluetoothAdapter.class
+                 .getDeclaredConstructor(managerClass, Context.class);
+         constructor.setAccessible(true);
+-        BluetoothAdapter adapter = constructor.newInstance(manager, context);
+-        BluetoothDevice device = adapter.getRemoteDevice(args[1]);
+-        Handler timeout = new Handler(Looper.getMainLooper());
+-        timeout.postDelayed(() -> System.exit(3), 7000);
++        final BluetoothAdapter adapter = constructor.newInstance(manager, context);
++        final BluetoothDevice device = adapter.getRemoteDevice(args[1]);
++        new Handler(Looper.getMainLooper()).postDelayed(() -> {
++            System.out.println(cmd + ": timeout waiting for HID_HOST proxy");
++            System.exit(3);
++        }, 7000);
+         boolean requested = adapter.getProfileProxy(context, new BluetoothProfile.ServiceListener() {
+             @Override public void onServiceConnected(int profile, BluetoothProfile proxy) {
++                int code = 0;
+                 try {
+-                    Method setPolicy = proxy.getClass().getMethod(
+-                            "setConnectionPolicy", BluetoothDevice.class, int.class);
+-                    boolean policy = (Boolean) setPolicy.invoke(proxy, device, suspend ? 0 : 100);
+-                    Method transition = proxy.getClass().getMethod(
+-                            suspend ? "disconnect" : "connect", BluetoothDevice.class);
+-                    boolean result = (Boolean) transition.invoke(proxy, device);
+-                    Log.i(TAG, "Root HID " + (suspend ? "suspend" : "resume")
+-                            + ": policy=" + policy + " transition=" + result);
+-                    System.out.println((suspend ? "suspend" : "resume")
+-                            + ": policy=" + policy + " transition=" + result);
++                    Class<?> c = proxy.getClass();
++                    String result;
++                    if ("status".equals(cmd)) {
++                        Object policy = c.getMethod("getConnectionPolicy", BluetoothDevice.class).invoke(proxy, device);
++                        Object state = c.getMethod("getConnectionState", BluetoothDevice.class).invoke(proxy, device);
++                        result = "policy=" + policy + " hid_state=" + state + " bond=" + device.getBondState()
++                                + " (policy 100=allowed 0=forbidden; state 2=connected; bond 12=bonded)";
++                    } else {
++                        boolean suspend = "suspend".equals(cmd);
++                        boolean policy = (Boolean) c.getMethod("setConnectionPolicy", BluetoothDevice.class, int.class)
++                                .invoke(proxy, device, suspend ? 0 : 100);
++                        String transition = "none";
++                        if (!"allow".equals(cmd)) {
++                            transition = String.valueOf(c.getMethod(suspend ? "disconnect" : "connect", BluetoothDevice.class)
++                                    .invoke(proxy, device));
++                        }
++                        result = "policy=" + policy + " transition=" + transition;
++                        if (!policy) code = 4;
++                    }
++                    Log.i(TAG, "HidCtl " + cmd + ": " + result);
++                    System.out.println(cmd + ": " + result);
+                     adapter.closeProfileProxy(profile, proxy);
+-                    System.exit((policy || result) ? 0 : 4);
+                 } catch (Throwable t) {
+-                    Log.e(TAG, "Root HID disconnect failed", t);
+-                    t.printStackTrace();
+-                    System.exit(5);
++                    Log.e(TAG, "HidCtl " + cmd + " failed", t);
++                    System.out.println(cmd + ": failed: " + t);
++                    code = 5;
+                 }
++                System.exit(code);
+             }
+             @Override public void onServiceDisconnected(int profile) {}
+-        }, 4);
+-        if (!requested) System.exit(6);
++        }, HID_HOST);
++        if (!requested) {
++            System.out.println(cmd + ": getProfileProxy refused");
++            System.exit(6);
++        }
+         Looper.loop();
+     }
+ }
+diff -ruN pad3/module/action.sh pad2/module/action.sh
+--- pad3/module/action.sh	2026-10-13 14:16:00.302035905 +0300
++++ pad2/module/action.sh	2026-10-13 15:08:07.123547286 +0300
+@@ -1,9 +1,19 @@
+ #!/system/bin/sh
++# KernelSU/Magisk "Action" button: re-apply the current mode and show status.
+ 
+ MODDIR=${0%/*}
++LOG_TAG=action
++. "$MODDIR/common.sh"
+ 
+-if dumpsys input 2>/dev/null | grep -q 'pogo_touchpad'; then
+-    sh "$MODDIR/switch-mode.sh" attached
+-else
+-    sh "$MODDIR/switch-mode.sh" detached
+-fi
++if is_attached; then NOW=attached; else NOW=detached; fi
++echo "Keyboard: $KBD_MAC  pogo: $NOW"
++SRC=action sh "$MODDIR/switch-mode.sh" "$NOW" force
++sh "$MODDIR/descriptor-fix.sh" check
++case $? in
++    0) echo "Report map: truncated (will be repaired on next Bluetooth restart/reboot)" ;;
++    1) echo "Report map: OK or keyboard not bonded" ;;
++    4) echo "Report map: truncated and repair INVALID - see log" ;;
++esac
++CLASSPATH="$MODDIR/hidctl.jar" app_process /system/bin local.pad2kbd.pogopair.HidCtl status "$KBD_MAC" 2>&1
++echo "Log: $LOG_FILE"
++tail -n 8 "$LOG_FILE" 2>/dev/null
+diff -ruN pad3/module/common.sh pad2/module/common.sh
+--- pad3/module/common.sh	1970-01-01 02:00:00.000000000 +0200
++++ pad2/module/common.sh	2026-10-13 15:08:07.124733669 +0300
+@@ -0,0 +1,43 @@
++#!/system/bin/sh
++# Shared helpers. Caller sets MODDIR before sourcing.
++
++. "$MODDIR/config.sh"
++
++log() {
++    if [ -f "$LOG_FILE" ] && [ "$(stat -c %s "$LOG_FILE" 2>/dev/null || echo 0)" -gt "$LOG_MAX_BYTES" ]; then
++        mv -f "$LOG_FILE" "$LOG_FILE.1"
++    fi
++    echo "$(date '+%m-%d %H:%M:%S') [${LOG_TAG:-pad2kbd}] $*" >> "$LOG_FILE"
++    /system/bin/log -t pad2kbd "$*" 2>/dev/null
++}
++
++# Runs HidCtl as root via app_process; output goes to the log.
++# app_process needs ART from /apex. Processes forked from KernelSU's post-fs-data stage
++# (e.g. the uninstall cleanup) stay in the early bootstrap mount namespace without it and
++# crash with SIGSEGV, so always run inside init's namespace.
++hidctl() {
++    _out=$(nsenter -t 1 -m -- env CLASSPATH="$MODDIR/hidctl.jar" app_process /system/bin \
++        local.pad2kbd.pogopair.HidCtl "$@" 2>&1)
++    _rc=$?
++    log "hidctl $*: rc=$_rc $(echo "$_out" | tr '\n' ' ' | cut -c1-300)"
++    return $_rc
++}
++
++# 0 = attached, 1 = detached, 2 = unknown (input service unavailable, e.g. during shutdown)
++pogo_state() {
++    _in=$(dumpsys input 2>/dev/null)
++    [ -n "$_in" ] || return 2
++    echo "$_in" | grep -q "$POGO_INPUT_NAME"
++}
++
++is_attached() {
++    pogo_state
++}
++
++# Android 17 init consumes sys.powerctl without storing it, and "adb reboot" bypasses the
++# framework (no sys.shutdown.requested). init does write the reason to persist.sys.boot.reason
++# (empty at runtime; bootstat clears it at boot) and stops zygote, so check those too.
++shutting_down() {
++    [ -n "$(getprop sys.shutdown.requested)$(getprop sys.powerctl)$(getprop persist.sys.boot.reason)" ] && return 0
++    [ "$(getprop init.svc.zygote)" != "running" ]
++}
+diff -ruN pad3/module/config.sh pad2/module/config.sh
+--- pad3/module/config.sh	1970-01-01 02:00:00.000000000 +0200
++++ pad2/module/config.sh	2026-10-13 15:08:07.124782415 +0300
+@@ -0,0 +1,45 @@
++#!/system/bin/sh
++# All device-specific values for the Pad 2 keyboard module live here.
++# Every other script sources this file; nothing else hardcodes these values.
++
++# --- keyboard identity (Pad 2 Smart Keyboard, collected 2026-10-13) ---
++KBD_MAC=XX:XX:XX:XX:XX:XX
++KBD_VID=8921            # 0x22D9 OnePlus
++KBD_PID=14441           # 0x3869
++
++# --- HID report map repair ---
++# Android reads 512 bytes of the 561-byte map over GATT; the remaining 49 bytes
++# (end of the touchpad collection) are appended from here.
++DESC_TRUNC_BYTES=512
++DESC_FULL_BYTES=561
++DESC_TAIL=0c66011047ffff000027ffff000075109501095681020954250575089501810205091901290115002501750895018102c0
++# Touchpad size fix: the firmware declares Physical Max = Logical Max (2764 x 1630 in 0.01 inch,
++# i.e. 70 x 41 cm), so Android moves the BLE pointer ~6x too fast. These byte swaps (old:new, per
++# finger slot) declare the real 4.73 x 2.79 in (120 x 71 mm) = 23 units/mm, same as pogo_touchpad.
++# Set to empty to disable.
++DESC_SWAPS="46cc0a:46d901 465e06:461701"
++
++# --- attach/detach detection ---
++UEVENT_DEVNAME=pogo_keyboard     # uevent DEVNAME of the pogo driver
++UEVENT_STATUS_VAR=pogopin_status # 1 = attached, 0 = detached
++POGO_INPUT_NAME=pogo_touchpad    # input device present only while attached
++POLL_SECONDS=3
++
++# --- environment ---
++BT_CONFIG=/data/misc/bluedroid/bt_config.conf
++STATE_DIR=/data/adb/pad2kbd      # backups and state (root only)
++LOG_FILE=/data/local/tmp/pad2kbd.log
++LOG_MAX_BYTES=262144
++APP_PKG=local.pad2kbd.pogopair
++MAX_BT_RESTARTS_PER_BOOT=3
++
++# Global hidden-API exemption (hidden_api_policy*=1). Off by default: the companion
++# app is a priv-app and HidCtl runs under app_process, so it should not be needed.
++# Set to 1 only if testing proves otherwise; uninstall restores the old values.
++HIDDEN_API_POLICY=0
++
++# busybox: first one found wins (KernelSU, Magisk, APatch)
++for _bb in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox /data/adb/ap/bin/busybox; do
++    [ -x "$_bb" ] && { BB=$_bb; break; }
++done
++unset _bb
+diff -ruN pad3/module/customize.sh pad2/module/customize.sh
+--- pad3/module/customize.sh	1970-01-01 02:00:00.000000000 +0200
++++ pad2/module/customize.sh	2026-10-13 15:08:07.124815816 +0300
+@@ -0,0 +1,21 @@
++#!/system/bin/sh
++# Install-time checks (sourced by the KernelSU/Magisk installer).
++
++DEV="$(getprop ro.custom.device) $(getprop ro.product.vendor.device) $(getprop ro.product.device)"
++case "$DEV" in
++    *caihong*|*OP5DAAL1*) ui_print "- Device: OnePlus Pad 2 ($DEV)" ;;
++    *) abort "! This module is only for the OnePlus Pad 2 (caihong); found: $DEV" ;;
++esac
++
++if [ -d /data/adb/modules/oneplus_pogo_keyboard_ble ] && [ ! -f /data/adb/modules/oneplus_pogo_keyboard_ble/remove ]; then
++    ui_print "! WARNING: the Pad 3 module (oneplus_pogo_keyboard_ble) is still installed."
++    ui_print "!          Remove it before rebooting so the two do not fight over Bluetooth."
++fi
++
++set_perm_recursive "$MODPATH" 0 0 0755 0644
++for f in post-fs-data.sh service.sh uninstall.sh action.sh switch-mode.sh \
++         uevent-handler.sh descriptor-fix.sh config.sh common.sh; do
++    set_perm "$MODPATH/$f" 0 0 0755
++done
++ui_print "- Log file: /data/local/tmp/pad2kbd.log"
++ui_print "- Keyboard MAC and other values: $MODPATH/config.sh"
+diff -ruN pad3/module/descriptor-fix.sh pad2/module/descriptor-fix.sh
+--- pad3/module/descriptor-fix.sh	2026-10-13 14:16:00.301989375 +0300
++++ pad2/module/descriptor-fix.sh	2026-10-13 15:08:07.124848194 +0300
+@@ -1,51 +1,124 @@
+ #!/system/bin/sh
+-
+-BB=/data/adb/ksu/bin/busybox
+-CFG=/data/misc/bluedroid/bt_config.conf
+-TMP=/data/misc/bluedroid/.bt_config.pogofix
+-
+-# Device-specific continuation after the GATT 512-byte attribute limit.
+-# The keyboard sends a 29-byte touchpad report: five 5-byte contacts,
+-# a 16-bit scan timestamp, an 8-bit contact count, and an 8-bit button.
+-TAIL=0c66011047ffff000027ffff000075109501095681020954250575089501810205091901290115002501750895018102c0
+-
+-[ -f "$CFG" ] || exit 1
+-
+-needs_fix() {
+-    "$BB" awk '
+-        BEGIN { dev=0; vendor=0; product=0 }
+-        /^\[/ { dev=(tolower($0)=="[XX:XX:XX:XX:XX:XX]"); vendor=0; product=0 }
+-        dev && $0=="HogpVendorId = 8921" { vendor=1 }
+-        dev && $0=="HogpProductId = 14441" { product=1 }
+-        dev && vendor && product && /^HogpDescriptor = / {
+-            d=substr($0,18)
+-            if (length(d)==1024 || length(d)==1208 || length(d)==1210) { found=1; exit }
++# Repairs the keyboard's HID report map cached in bt_config.conf.
++#   check    exit 0 = needs repair, 1 = nothing to do, 4 = truncated but repair would be invalid
++#   apply    repair (only safe while the Bluetooth stack is not running)
++#   restore  put back the original 512-byte map (used by uninstall)
++
++MODDIR=${0%/*}
++LOG_TAG=descfix
++. "$MODDIR/common.sh"
++
++[ -n "$BB" ] || { log "no busybox found"; exit 3; }
++[ -f "$BT_CONFIG" ] || exit 1
++
++# Prints the rewritten config on stdout. Exit status of awk: 0 = changed, 1 = unchanged,
++# 4 = truncated map found but repaired map failed validation.
++transform() {
++    "$BB" awk -v mode="$1" -v mac="$(echo "$KBD_MAC" | tr 'A-F' 'a-f')" \
++        -v vid="$KBD_VID" -v pid="$KBD_PID" -v tail="$DESC_TAIL" \
++        -v trunc="$DESC_TRUNC_BYTES" -v full="$DESC_FULL_BYTES" -v swaps="$DESC_SWAPS" '
++    function hx(s) { s = tolower(s); return (index("0123456789abcdef", substr(s,1,1)) - 1) * 16 + index("0123456789abcdef", substr(s,2,1)) - 1 }
++    # Walks HID items: must end exactly on an item boundary with all collections closed.
++    function valid(h,   n, i, b, sz, depth) {
++        if (h !~ /^[0-9a-f]+$/ || length(h) % 2) return 0
++        n = length(h) / 2; i = 0; depth = 0
++        while (i < n) {
++            b = hx(substr(h, i*2 + 1, 2))
++            if (b == 254) { if (i + 1 >= n) return 0; i += 3 + hx(substr(h, i*2 + 3, 2)); continue }
++            sz = b % 4; if (sz == 3) sz = 4
++            if (b - b % 4 == 160) depth++
++            if (b - b % 4 == 192) { depth--; if (depth < 0) return 0 }
++            i += 1 + sz
++        }
++        return (i == n && depth == 0)
++    }
++    # Replaces whole items equal to "from" with "to", only at item boundaries.
++    function swap(h, from, to,   n, i, b, sz, out, item) {
++        n = length(h) / 2; i = 0; out = ""
++        while (i < n) {
++            b = hx(substr(h, i*2 + 1, 2))
++            if (b == 254) sz = 2 + hx(substr(h, i*2 + 3, 2)); else { sz = b % 4; if (sz == 3) sz = 4 }
++            item = substr(h, i*2 + 1, (1 + sz) * 2)
++            out = out (item == from ? to : item)
++            i += 1 + sz
++        }
++        return out
++    }
++    function swap_all(h, dir,   k, nsw, pair, ab) {
++        nsw = split(swaps, pair, " ")
++        for (k = 1; k <= nsw; k++) {
++            split(pair[k], ab, ":")
++            h = (dir > 0) ? swap(h, ab[1], ab[2]) : swap(h, ab[2], ab[1])
++        }
++        return h
++    }
++    function flush(   k, d, f) {
++        for (k = 1; k <= cnt; k++) {
++            if (ours && vok && pok && buf[k] ~ /^HogpDescriptor = /) {
++                d = substr(buf[k], 18)
++                if (mode == "fix" && (length(d) == trunc * 2 || (length(d) == full * 2 && substr(d, trunc*2 + 1) == tail))) {
++                    f = swap_all(substr(d, 1, trunc * 2) tail, 1)
++                    if (f != d) {
++                        if (valid(f) && length(f) == full * 2) { buf[k] = "HogpDescriptor = " f; changed = 1 }
++                        else bad = 1
++                    }
++                }
++                if (mode == "restore" && length(d) == full * 2 && substr(d, trunc*2 + 1) == tail) {
++                    buf[k] = "HogpDescriptor = " substr(swap_all(d, -1), 1, trunc * 2); changed = 1
++                }
++            }
++            print buf[k]
+         }
+-        END { exit(found ? 0 : 1) }
+-    ' "$CFG"
++        cnt = 0; ours = 0; vok = 0; pok = 0
++    }
++    /^\[/ { flush(); ours = (tolower($0) == "[" mac "]") }
++    { buf[++cnt] = $0 }
++    $0 == "HogpVendorId = " vid { vok = 1 }
++    $0 == "HogpProductId = " pid { pok = 1 }
++    END { flush(); exit(bad ? 4 : (changed ? 0 : 1)) }
++    ' "$BT_CONFIG"
+ }
+ 
+-[ "$1" = "check" ] && { needs_fix; exit $?; }
+-[ "$1" = "apply" ] || exit 2
+-needs_fix || exit 0
+-
+-"$BB" awk -v tail="$TAIL" '
+-    BEGIN { dev=0; vendor=0; product=0 }
+-    /^\[/ { dev=(tolower($0)=="[XX:XX:XX:XX:XX:XX]"); vendor=0; product=0 }
+-    dev && $0=="HogpVendorId = 8921" { vendor=1 }
+-    dev && $0=="HogpProductId = 14441" { product=1 }
+-    dev && vendor && product && /^HogpDescriptor = / {
+-        d=substr($0,18)
+-        if (length(d)==1024 || length(d)==1208 || length(d)==1210) d=substr(d,1,1024) tail
+-        print "HogpDescriptor = " d
+-        next
+-    }
+-    { print }
+-' "$CFG" > "$TMP" || exit 3
++write_config() {  # $1 = mode (fix|restore)
++    TMP="$BT_CONFIG.pad2kbd.tmp"
++    transform "$1" > "$TMP"; rc=$?
++    if [ $rc -ne 0 ]; then rm -f "$TMP"; return $rc; fi
++    if [ ! -s "$TMP" ] || [ "$(wc -l < "$TMP")" -ne "$(wc -l < "$BT_CONFIG")" ]; then
++        log "refusing to write: temp file empty or line count differs"; rm -f "$TMP"; return 3
++    fi
++    chown bluetooth:bluetooth "$TMP"; chmod 0660 "$TMP"
++    chcon u:object_r:bluetooth_data_file:s0 "$TMP" 2>/dev/null
++    mv -f "$TMP" "$BT_CONFIG"
++}
++
++backup_once() {
++    mkdir -p "$STATE_DIR"; chmod 0700 "$STATE_DIR"
++    if [ ! -f "$STATE_DIR/bt_config.conf.orig" ]; then
++        cp -p "$BT_CONFIG" "$STATE_DIR/bt_config.conf.orig" && chmod 0600 "$STATE_DIR/bt_config.conf.orig"
++        log "backed up bt_config.conf to $STATE_DIR/bt_config.conf.orig"
++    fi
++}
+ 
+-cat "$TMP" > "$CFG"
+-chown bluetooth:bluetooth "$CFG"
+-chmod 0660 "$CFG"
+-chcon u:object_r:bluetooth_data_file:s0 "$CFG" 2>/dev/null
+-rm -f "$TMP"
+-log -t PogoPair "Repaired OnePlus Pad 3 keyboard HID report map"
++case "$1" in
++    check)
++        transform fix > /dev/null; rc=$?
++        [ $rc -eq 4 ] && log "truncated map found but repaired map is invalid; not touching it"
++        exit $rc
++        ;;
++    apply)
++        transform fix > /dev/null; rc=$?
++        [ $rc -eq 0 ] || { [ $rc -eq 4 ] && log "apply skipped: repaired map would be invalid"; exit $rc; }
++        backup_once
++        write_config fix; rc=$?
++        if [ $rc -eq 0 ]; then log "repaired HID report map for $KBD_MAC ($DESC_FULL_BYTES bytes, size swaps: ${DESC_SWAPS:-none})"
++        else log "apply failed rc=$rc"; fi
++        exit $rc
++        ;;
++    restore)
++        write_config restore; rc=$?
++        if [ $rc -eq 0 ]; then log "restored original $DESC_TRUNC_BYTES-byte report map for $KBD_MAC"; fi
++        exit $rc
++        ;;
++    *)
++        echo "usage: $0 check|apply|restore" >&2; exit 2 ;;
++esac
+diff -ruN pad3/module/module.prop pad2/module/module.prop
+--- pad3/module/module.prop	2026-10-13 14:16:00.302123723 +0300
++++ pad2/module/module.prop	2026-10-13 15:08:07.125039590 +0300
+@@ -1,6 +1,6 @@
+-id=oneplus_pogo_keyboard_ble
+-name=OnePlus Pad 3 Keyboard BLE
+-version=1.7
+-versionCode=8
+-author=Codex
+-description=Restores BLE pairing, keyboard and touchpad HID input, and a smooth low-latency pointer for the official OPD2415 pogo keyboard on AOSP ROMs.
++id=pad2_keyboard_ble
++name=OnePlus Pad 2 Keyboard BLE (personal port)
++version=0.7
++versionCode=7
++author=ardy (port of Drun555's Pad 3 module)
++description=Personal Pad 2 port of Drun555's Pad 3 module
+diff -ruN pad3/module/post-fs-data.sh pad2/module/post-fs-data.sh
+--- pad3/module/post-fs-data.sh	2026-10-13 14:16:00.302014439 +0300
++++ pad2/module/post-fs-data.sh	2026-10-13 15:08:07.124882520 +0300
+@@ -1,4 +1,12 @@
+ #!/system/bin/sh
++# Runs before the Bluetooth stack starts, so bt_config.conf can be edited safely.
+ 
+ MODDIR=${0%/*}
+-"$MODDIR/descriptor-fix.sh" apply
++LOG_TAG=post-fs
++. "$MODDIR/common.sh"
++
++mkdir -p "$STATE_DIR"; chmod 0700 "$STATE_DIR"
++rm -f "$STATE_DIR/mode" "$STATE_DIR/bt_restarts"
++rmdir "$STATE_DIR/switch.lock" 2>/dev/null
++log "boot: module $(grep '^version=' "$MODDIR/module.prop" | cut -d= -f2), busybox=${BB:-none}"
++sh "$MODDIR/descriptor-fix.sh" apply
+diff -ruN pad3/module/service.sh pad2/module/service.sh
+--- pad3/module/service.sh	2026-10-13 14:16:00.302155370 +0300
++++ pad2/module/service.sh	2026-10-13 15:08:07.124914663 +0300
+@@ -1,53 +1,82 @@
+ #!/system/bin/sh
+ 
+ MODDIR=${0%/*}
+-BB=/data/adb/ksu/bin/busybox
++LOG_TAG=service
++. "$MODDIR/common.sh"
+ 
+-until [ "$(getprop sys.boot_completed)" = "1" ]; do
+-    sleep 2
+-done
++until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
++until [ "$(getprop sys.user.0.ce_available)" = "true" ]; do sleep 2; done
+ 
+-until [ "$(getprop sys.user.0.ce_available)" = "true" ]; do
+-    sleep 2
+-done
++# KernelSU without a mounting metamodule does not overlay system/, so the priv-app copy is
++# never seen. Fall back to installing the APK as a normal app (removed again by uninstall.sh).
++APK="$MODDIR/system/priv-app/Pad2KbdPair/Pad2KbdPair.apk"
++if ! pm path "$APP_PKG" 2>/dev/null | grep -q "^package:/system"; then
++    want=$(sha256sum "$APK" | cut -d' ' -f1)
++    if [ "$(cat "$STATE_DIR/app_sha256" 2>/dev/null)" != "$want" ] || ! pm path "$APP_PKG" >/dev/null 2>&1; then
++        # pm cannot read files under /data/adb; stage a copy it can read.
++        cp -f "$APK" /data/local/tmp/pad2kbd.apk && chmod 0644 /data/local/tmp/pad2kbd.apk
++        out=$(pm install -r -g /data/local/tmp/pad2kbd.apk 2>&1)
++        rm -f /data/local/tmp/pad2kbd.apk
++        log "installed $APP_PKG as a normal app: $out"
++        echo "$want" > "$STATE_DIR/app_sha256"
++        touch "$STATE_DIR/app_user_installed"
++    fi
++fi
++
++# Lets the latency helper start from a background broadcast. Undone by uninstall.sh.
++cmd deviceidle whitelist +"$APP_PKG" >/dev/null 2>&1
+ 
+-# KernelSU on this ROM does not mount system/ overlays. Install the small
+-# companion as an ordinary package so its GATT latency service is available.
+-if ! pm path local.codex.pogopair >/dev/null 2>&1; then
+-    pm install -r -g "$MODDIR/PogoPair.apk" >/dev/null 2>&1
++if [ "$HIDDEN_API_POLICY" = "1" ]; then
++    if [ ! -f "$STATE_DIR/hidden_api_policy.orig" ]; then
++        for k in hidden_api_policy hidden_api_policy_p_apps hidden_api_policy_pre_p_apps; do
++            echo "$k=$(settings get global $k)"
++        done > "$STATE_DIR/hidden_api_policy.orig"
++    fi
++    for k in hidden_api_policy hidden_api_policy_p_apps hidden_api_policy_pre_p_apps; do
++        settings put global $k 1 >/dev/null 2>&1
++    done
++    log "hidden_api_policy* set to 1 (previous values in $STATE_DIR/hidden_api_policy.orig)"
+ fi
+ 
+-# Exempt the tiny sticky GATT helper from background-service limits. It keeps
+-# the touchpad connection at the HID low-latency interval (about 15 ms).
+-cmd deviceidle whitelist +local.codex.pogopair >/dev/null 2>&1
+-settings put global hidden_api_policy 1 >/dev/null 2>&1
+-settings put global hidden_api_policy_p_apps 1 >/dev/null 2>&1
+-settings put global hidden_api_policy_pre_p_apps 1 >/dev/null 2>&1
+-
+-# Watch the driver's native uevents. The keyboard advertises over BLE after a
+-# physical detach; pairing is skipped by the receiver when a bond already exists.
+-"$BB" uevent "$MODDIR/uevent-handler.sh" &
+-
+-# A fresh bond initially stores the GATT-limited 512-byte report map. Repair it,
+-# then restart Bluetooth once so UHID receives the corrected 561-byte map.
+-LAST_MODE=-1
++if [ -n "$BB" ]; then
++    "$BB" uevent "$MODDIR/uevent-handler.sh" &
++    log "uevent listener started (pid $!)"
++else
++    log "no busybox: relying on the $POLL_SECONDS s poll only"
++fi
++
++# Poll loop: fallback attach/detach detection, plus repair of the report map after a new bond.
++# A new bond stores the 512-byte map; repairing needs the stack stopped, so Bluetooth is
++# restarted once, then the detached path re-allows HID (the stack forbids it after a failed probe).
++LAST=""
+ while true; do
+-    MODE=0
+-    dumpsys input 2>/dev/null | grep -q 'pogo_touchpad' && MODE=1
+-    if [ "$MODE" != "$LAST_MODE" ]; then
+-        if [ "$MODE" = "1" ]; then
+-            sh "$MODDIR/switch-mode.sh" attached
++    pogo_state; st=$?
++    if shutting_down || [ $st -eq 2 ]; then sleep "$POLL_SECONDS"; continue; fi
++    if [ $st -eq 0 ]; then NOW=attached; else NOW=detached; fi
++    if [ "$NOW" != "$LAST" ]; then
++        SRC=poll sh "$MODDIR/switch-mode.sh" "$NOW"
++        LAST=$NOW
++    fi
++
++    sh "$MODDIR/descriptor-fix.sh" check
++    if [ $? -eq 0 ]; then
++        n=$(cat "$STATE_DIR/bt_restarts" 2>/dev/null || echo 0)
++        if [ "$n" -ge "$MAX_BT_RESTARTS_PER_BOOT" ]; then
++            [ "$n" -eq "$MAX_BT_RESTARTS_PER_BOOT" ] && log "restart limit reached; not restarting Bluetooth again this boot"
++            echo $((n + 1)) > "$STATE_DIR/bt_restarts"
+         else
+-            sh "$MODDIR/switch-mode.sh" detached
++            echo $((n + 1)) > "$STATE_DIR/bt_restarts"
++            log "new bond with truncated map: restarting Bluetooth to repair it ($((n + 1))/$MAX_BT_RESTARTS_PER_BOOT)"
++            cmd bluetooth_manager disable >/dev/null 2>&1
++            cmd bluetooth_manager wait-for-state:STATE_OFF >/dev/null 2>&1
++            sh "$MODDIR/descriptor-fix.sh" apply
++            cmd bluetooth_manager enable >/dev/null 2>&1
++            cmd bluetooth_manager wait-for-state:STATE_ON >/dev/null 2>&1
++            sleep 2
++            if is_attached; then NOW=attached; else NOW=detached; fi
++            SRC=bt-restart sh "$MODDIR/switch-mode.sh" "$NOW" force
++            LAST=$NOW
+         fi
+-        LAST_MODE=$MODE
+-    fi
+-    if "$MODDIR/descriptor-fix.sh" check; then
+-        cmd bluetooth_manager disable >/dev/null 2>&1
+-        cmd bluetooth_manager wait-for-state:STATE_OFF >/dev/null 2>&1
+-        "$MODDIR/descriptor-fix.sh" apply
+-        cmd bluetooth_manager enable >/dev/null 2>&1
+-        cmd bluetooth_manager wait-for-state:STATE_ON >/dev/null 2>&1
+     fi
+-    sleep 3
++    sleep "$POLL_SECONDS"
+ done
+diff -ruN pad3/module/switch-mode.sh pad2/module/switch-mode.sh
+--- pad3/module/switch-mode.sh	2026-10-13 14:16:00.302177145 +0300
++++ pad2/module/switch-mode.sh	2026-10-13 15:08:07.124945994 +0300
+@@ -1,27 +1,47 @@
+ #!/system/bin/sh
++# switch-mode.sh attached|detached [force]
++# attached: stop the latency client, forbid BLE HID and disconnect it (no double input).
++# detached: allow BLE HID, connect, and bond (first time) or start the latency client.
+ 
+ MODDIR=${0%/*}
+-MAC=XX:XX:XX:XX:XX:XX
++LOG_TAG=switch
++. "$MODDIR/common.sh"
+ 
+-case "$1" in
++MODE=$1
++case "$MODE" in attached|detached) ;; *) echo "usage: $0 attached|detached [force]" >&2; exit 2 ;; esac
++
++# At reboot the pogo driver loses the keyboard heartbeat and sends a real "detached" uevent;
++# ignore it. (No debounce delay: a real detach should switch to BLE immediately.)
++if shutting_down; then
++    log "ignored $MODE from ${SRC:-?}: system is shutting down"
++    exit 0
++fi
++
++mkdir -p "$STATE_DIR"
++# Both the uevent listener and the poll loop report each transition; run once per change.
++LOCK="$STATE_DIR/switch.lock"
++i=0
++until mkdir "$LOCK" 2>/dev/null; do
++    i=$((i + 1)); [ $i -ge 20 ] && { log "lock busy, skipping $MODE"; exit 0; }
++    sleep 1
++done
++trap 'rmdir "$LOCK" 2>/dev/null' EXIT
++
++if [ "$2" != "force" ] && [ "$(cat "$STATE_DIR/mode" 2>/dev/null)" = "$MODE" ]; then
++    exit 0
++fi
++echo "$MODE" > "$STATE_DIR/mode"
++
++case "$MODE" in
+     attached)
+-        # The pogo path is active. Stop the latency GATT client first, then
+-        # forbid HID auto-reconnect and close the wireless HID session.
+-        am stopservice --user 0 \
+-            -n local.codex.pogopair/.LatencyService >/dev/null 2>&1
+-        CLASSPATH="$MODDIR/hidctl.jar" app_process /system/bin \
+-            local.codex.pogopair.HidCtl suspend "$MAC" >/dev/null 2>&1
+-        log -t PogoPair "Pogo attached; BLE HID suspended"
++        log "pogo attached (${SRC:-?}) -> suspend BLE HID for $KBD_MAC"
++        am stopservice --user 0 -n "$APP_PKG/.LatencyService" >/dev/null 2>&1
++        hidctl suspend "$KBD_MAC"
+         ;;
+     detached)
+-        # Re-enable the HID policy and connect while the detached keyboard is
+-        # advertising. The receiver then keeps the BLE interval at 15 ms.
+-        CLASSPATH="$MODDIR/hidctl.jar" app_process /system/bin \
+-            local.codex.pogopair.HidCtl resume "$MAC" >/dev/null 2>&1
+-        am broadcast --user 0 \
+-            -a local.codex.pogopair.PAIR \
+-            -n local.codex.pogopair/.PairReceiver \
+-            --es mac "$MAC" >/dev/null 2>&1
+-        log -t PogoPair "Pogo detached; BLE HID resumed"
++        log "pogo detached (${SRC:-?}) -> resume BLE HID for $KBD_MAC"
++        hidctl resume "$KBD_MAC"
++        am broadcast --user 0 -a "$APP_PKG.PAIR" -n "$APP_PKG/.PairReceiver" \
++            --es mac "$KBD_MAC" >/dev/null 2>&1
+         ;;
+ esac
+diff -ruN pad3/module/system/etc/permissions/privapp-permissions-pogopair.xml pad2/module/system/etc/permissions/privapp-permissions-pogopair.xml
+--- pad3/module/system/etc/permissions/privapp-permissions-pogopair.xml	2026-10-13 14:16:00.302058160 +0300
++++ pad2/module/system/etc/permissions/privapp-permissions-pogopair.xml	2026-10-13 15:08:07.126547267 +0300
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <permissions>
+-    <privapp-permissions package="local.codex.pogopair">
++    <privapp-permissions package="local.pad2kbd.pogopair">
+         <permission name="android.permission.BLUETOOTH_PRIVILEGED" />
+     </privapp-permissions>
+ </permissions>
+diff -ruN pad3/module/uevent-handler.sh pad2/module/uevent-handler.sh
+--- pad3/module/uevent-handler.sh	2026-10-13 14:16:00.300365080 +0300
++++ pad2/module/uevent-handler.sh	2026-10-13 15:08:07.124976959 +0300
+@@ -1,14 +1,13 @@
+ #!/system/bin/sh
+-
+-[ "$DEVNAME" = "pogo_keyboard" ] || exit 0
++# Called by "busybox uevent" for every kernel uevent (variables arrive in the environment).
+ 
+ MODDIR=${0%/*}
++. "$MODDIR/config.sh"
++
++[ "$DEVNAME" = "$UEVENT_DEVNAME" ] || exit 0
+ 
+-case "$pogopin_status" in
+-    0)
+-        sh "$MODDIR/switch-mode.sh" detached
+-        ;;
+-    1)
+-        sh "$MODDIR/switch-mode.sh" attached
+-        ;;
++eval "STATUS=\$$UEVENT_STATUS_VAR"
++case "$STATUS" in
++    0) SRC=uevent sh "$MODDIR/switch-mode.sh" detached ;;
++    1) SRC=uevent sh "$MODDIR/switch-mode.sh" attached ;;
+ esac
+diff -ruN pad3/module/uninstall.sh pad2/module/uninstall.sh
+--- pad3/module/uninstall.sh	1970-01-01 02:00:00.000000000 +0200
++++ pad2/module/uninstall.sh	2026-10-13 15:08:07.125007745 +0300
+@@ -0,0 +1,40 @@
++#!/system/bin/sh
++# Runs at the start of the boot after the module is marked for removal (Bluetooth not running yet).
++# Undoes every persistent change: report map edit, HID policy, deviceidle whitelist,
++# hidden-API settings (only if this module changed them), and the state directory.
++
++MODDIR=${0%/*}
++LOG_TAG=uninstall
++. "$MODDIR/common.sh"
++
++log "uninstalling"
++sh "$MODDIR/descriptor-fix.sh" restore
++
++# The module directory is deleted right after this script returns, so the late cleanup
++# runs from a copy of what it needs.
++WORK="$STATE_DIR/uninstall"
++mkdir -p "$WORK"
++cp -f "$MODDIR/hidctl.jar" "$MODDIR/config.sh" "$MODDIR/common.sh" "$WORK/"
++
++(
++    MODDIR=$WORK
++    . "$WORK/common.sh"
++    LOG_TAG=uninstall
++    until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
++    sleep 10
++    cmd deviceidle whitelist -"$APP_PKG" >/dev/null 2>&1
++    if [ -f "$STATE_DIR/app_user_installed" ]; then
++        log "removing $APP_PKG: $(pm uninstall "$APP_PKG" 2>&1)"
++    fi
++    if [ -f "$STATE_DIR/hidden_api_policy.orig" ]; then
++        while IFS='=' read -r k v; do
++            if [ "$v" = "null" ] || [ -z "$v" ]; then settings delete global "$k" >/dev/null 2>&1
++            else settings put global "$k" "$v" >/dev/null 2>&1; fi
++        done < "$STATE_DIR/hidden_api_policy.orig"
++        log "hidden_api_policy* restored"
++    fi
++    # Leave the keyboard's HID policy at the Android default (allowed), never stuck at forbidden.
++    hidctl allow "$KBD_MAC"
++    log "uninstall complete; removing $STATE_DIR (bt_config backup included)"
++    rm -rf "$STATE_DIR"
++) </dev/null >/dev/null 2>&1 &
+diff -ruN pad3/PogoPair/AndroidManifest.xml pad2/PogoPair/AndroidManifest.xml
+--- pad3/PogoPair/AndroidManifest.xml	2026-10-13 14:16:00.302199399 +0300
++++ pad2/PogoPair/AndroidManifest.xml	2026-10-13 15:08:07.129547248 +0300
+@@ -1,33 +1,20 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+-    package="local.codex.pogopair"
+-    android:versionCode="4"
+-    android:versionName="1.3">
++    package="local.pad2kbd.pogopair"
++    android:versionCode="1"
++    android:versionName="0.1">
+     <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+     <uses-permission android:name="android.permission.BLUETOOTH" />
+     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
+-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+-    <application android:theme="@android:style/Theme.Material.Light" android:label="Pogo BLE Pair" android:directBootAware="true">
+-        <receiver
+-            android:name=".PairReceiver"
+-            android:exported="true">
++    <application android:label="Pad2 Kbd Pair" android:directBootAware="true" android:allowBackup="false">
++        <!-- Not exported: only root/system (the module scripts) can reach these. -->
++        <receiver android:name=".PairReceiver" android:exported="false">
+             <intent-filter>
+-                <action android:name="local.codex.pogopair.PAIR" />
+-                <action android:name="local.codex.pogopair.ATTACH" />
+-                <action android:name="android.bluetooth.device.action.BOND_STATE_CHANGED" />
++                <action android:name="local.pad2kbd.pogopair.PAIR" />
+             </intent-filter>
+         </receiver>
+-        <service
+-            android:name=".LatencyService"
+-            android:exported="true"
+-            android:stopWithTask="false" />
+-        <activity
+-            android:name=".MainActivity"
+-            android:exported="true">
+-            <intent-filter>
+-                <action android:name="android.intent.action.MAIN" />
+-                <category android:name="android.intent.category.LAUNCHER" />
+-            </intent-filter>
+-        </activity>
++        <service android:name=".LatencyService" android:exported="false" android:stopWithTask="false" />
++        <activity android:name=".MainActivity" android:exported="false"
++            android:theme="@android:style/Theme.Material.Light" />
+     </application>
+ </manifest>
+diff -ruN pad3/PogoPair/src/local/codex/pogopair/LatencyService.java pad2/PogoPair/src/local/codex/pogopair/LatencyService.java
+--- pad3/PogoPair/src/local/codex/pogopair/LatencyService.java	2026-10-13 14:16:00.302398099 +0300
++++ pad2/PogoPair/src/local/codex/pogopair/LatencyService.java	2026-10-13 15:08:07.132547229 +0300
+@@ -1,4 +1,4 @@
+-package local.codex.pogopair;
++package local.pad2kbd.pogopair;
+ 
+ import android.app.Service;
+ import android.bluetooth.BluetoothAdapter;
+@@ -7,40 +7,61 @@
+ import android.bluetooth.BluetoothGattCallback;
+ import android.bluetooth.BluetoothProfile;
+ import android.content.Intent;
++import android.content.SharedPreferences;
+ import android.os.Handler;
+ import android.os.IBinder;
+ import android.os.Looper;
+ import android.util.Log;
+ 
+-/** Keeps a GATT client open and requests the low-latency BLE interval used by a touchpad. */
++/**
++ * Keeps a GATT client open and requests the high-priority (~11-15 ms) BLE interval for the touchpad.
++ * The MAC arrives as an intent extra and is remembered so a sticky restart (null intent) still works.
++ */
+ public final class LatencyService extends Service {
+-    private static final String TAG = "PogoPair";
+-    private static final String DEFAULT_MAC = "XX:XX:XX:XX:XX:XX";
++    private static final String TAG = PairReceiver.TAG;
++    private static final long MAX_RETRY_MS = 30000;
+     private final Handler handler = new Handler(Looper.getMainLooper());
+     private BluetoothGatt gatt;
+-    private String mac = DEFAULT_MAC;
++    private String mac;
+     private boolean stopped;
++    private long retryMs = 1500;
+ 
+     private final BluetoothGattCallback callback = new BluetoothGattCallback() {
+         @Override public void onConnectionStateChange(BluetoothGatt current, int status, int state) {
+             Log.i(TAG, "Latency GATT state=" + state + " status=" + status);
+             if (state == BluetoothProfile.STATE_CONNECTED) {
++                retryMs = 1500;
+                 requestHighPriority(current);
+                 handler.postDelayed(() -> requestHighPriority(current), 2000);
+             } else if (state == BluetoothProfile.STATE_DISCONNECTED && !stopped) {
+-                handler.postDelayed(() -> connect(), 1500);
++                handler.postDelayed(() -> connect(), retryMs);
++                retryMs = Math.min(retryMs * 2, MAX_RETRY_MS);
+             }
+         }
+     };
+ 
+     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+         stopped = false;
+-        if (intent != null && intent.getStringExtra("mac") != null) mac = intent.getStringExtra("mac");
++        SharedPreferences prefs = getSharedPreferences("state", MODE_PRIVATE);
++        String extra = intent != null ? intent.getStringExtra("mac") : null;
++        if (extra != null && BluetoothAdapter.checkBluetoothAddress(extra)) {
++            mac = extra;
++            prefs.edit().putString("mac", mac).apply();
++        } else if (mac == null) {
++            mac = prefs.getString("mac", null);
++        }
++        if (mac == null) {
++            Log.w(TAG, "LatencyService started without a MAC; stopping");
++            stopSelf();
++            return START_NOT_STICKY;
++        }
++        retryMs = 1500;
+         connect();
+         return START_STICKY;
+     }
+ 
+     private void connect() {
++        if (stopped) return;
+         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+         if (adapter == null || !adapter.isEnabled()) {
+             handler.postDelayed(() -> connect(), 2000);
+diff -ruN pad3/PogoPair/src/local/codex/pogopair/MainActivity.java pad2/PogoPair/src/local/codex/pogopair/MainActivity.java
+--- pad3/PogoPair/src/local/codex/pogopair/MainActivity.java	2026-10-13 14:16:00.302292743 +0300
++++ pad2/PogoPair/src/local/codex/pogopair/MainActivity.java	2026-10-13 15:08:07.133547729 +0300
+@@ -1,4 +1,4 @@
+-package local.codex.pogopair;
++package local.pad2kbd.pogopair;
+ 
+ import android.app.Activity;
+ import android.bluetooth.BluetoothAdapter;
+@@ -10,10 +10,13 @@
+ import android.os.Bundle;
+ import android.util.Log;
+ import android.widget.TextView;
+-import java.lang.reflect.Method;
+ 
++/**
++ * Manual pairing screen, for debugging only (no launcher icon, not exported):
++ *   su -c am start -n local.pad2kbd.pogopair/.MainActivity --es mac XX:XX:XX:XX:XX:XX
++ */
+ public final class MainActivity extends Activity {
+-    private static final String TAG = "PogoPair";
++    private static final String TAG = PairReceiver.TAG;
+     private TextView status;
+ 
+     private final BroadcastReceiver receiver = new BroadcastReceiver() {
+@@ -37,23 +40,16 @@
+         registerReceiver(receiver, new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED));
+ 
+         String mac = getIntent().getStringExtra("mac");
+-        if (mac == null) mac = "XX:XX:XX:XX:XX:XX";
++        if (mac == null || !BluetoothAdapter.checkBluetoothAddress(mac)) {
++            status.setText("No valid MAC given. Start with: --es mac XX:XX:XX:XX:XX:XX");
++            return;
++        }
+         try {
+             BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+-            if (adapter == null) throw new IllegalStateException("No Bluetooth adapter");
+-            if (!adapter.isEnabled()) adapter.enable();
++            if (adapter == null || !adapter.isEnabled()) throw new IllegalStateException("Bluetooth is off");
+             adapter.cancelDiscovery();
+             BluetoothDevice device = adapter.getRemoteDevice(mac);
+-            boolean started;
+-            try {
+-                // After Bluetooth storage is reset Android no longer remembers that
+-                // this address is LE-only. Force LE instead of trying BR/EDR first.
+-                Method createBond = BluetoothDevice.class.getMethod("createBond", int.class);
+-                started = (Boolean) createBond.invoke(device, 2 /* TRANSPORT_LE */);
+-            } catch (Throwable hiddenApiFailure) {
+-                Log.w(TAG, "Falling back to automatic transport", hiddenApiFailure);
+-                started = device.createBond();
+-            }
++            boolean started = PairReceiver.createLeBond(device);
+             String message = "createBond(" + mac + ")=" + started + ", state=" + device.getBondState();
+             Log.i(TAG, message);
+             status.setText(message);
+diff -ruN pad3/PogoPair/src/local/codex/pogopair/PairReceiver.java pad2/PogoPair/src/local/codex/pogopair/PairReceiver.java
+--- pad3/PogoPair/src/local/codex/pogopair/PairReceiver.java	2026-10-13 14:16:00.302426494 +0300
++++ pad2/PogoPair/src/local/codex/pogopair/PairReceiver.java	2026-10-13 15:08:07.133605075 +0300
+@@ -1,84 +1,59 @@
+-package local.codex.pogopair;
++package local.pad2kbd.pogopair;
+ 
+ import android.bluetooth.BluetoothAdapter;
+ import android.bluetooth.BluetoothDevice;
+-import android.bluetooth.BluetoothProfile;
+ import android.content.BroadcastReceiver;
+ import android.content.Context;
+ import android.content.Intent;
+ import android.util.Log;
+ import java.lang.reflect.Method;
+ 
+-/** Starts bonding with the Pad 3 keyboard without opening a UI. */
++/**
++ * Bonds with the keyboard, or starts the latency helper when already bonded.
++ * Not exported: only root/system (the module scripts) can send it the PAIR broadcast.
++ * The MAC comes from the "mac" extra; nothing is hardcoded.
++ */
+ public final class PairReceiver extends BroadcastReceiver {
+-    private static final String TAG = "PogoPair";
+-    private static final String DEFAULT_MAC = "XX:XX:XX:XX:XX:XX";
+-    private static final String ACTION_ATTACH = "local.codex.pogopair.ATTACH";
++    static final String TAG = "pad2kbd";
+ 
+     @Override public void onReceive(Context context, Intent intent) {
+-        BluetoothDevice broadcastDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+-        String mac = broadcastDevice != null ? broadcastDevice.getAddress() : intent.getStringExtra("mac");
+-        if (mac == null || mac.length() == 0) mac = DEFAULT_MAC;
+-        if (!DEFAULT_MAC.equalsIgnoreCase(mac)) return;
+-
++        String mac = intent.getStringExtra("mac");
++        if (mac == null || !BluetoothAdapter.checkBluetoothAddress(mac)) {
++            Log.w(TAG, "PAIR without a valid mac extra: " + mac);
++            return;
++        }
+         try {
+             BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+             if (adapter == null || !adapter.isEnabled()) {
+                 Log.w(TAG, "Bluetooth is unavailable or disabled; skipping pair request");
+                 return;
+             }
+-
+             BluetoothDevice device = adapter.getRemoteDevice(mac);
+-            if (ACTION_ATTACH.equals(intent.getAction())) {
+-                context.stopService(new Intent(context, LatencyService.class));
+-                disconnectHid(context, adapter, device);
+-                return;
+-            }
+             int state = device.getBondState();
+             if (state == BluetoothDevice.BOND_BONDED) {
+-                Log.i(TAG, "Keyboard is already bonded: " + mac);
+-                startLatencyService(context, mac);
++                Log.i(TAG, "Keyboard already bonded: " + mac);
++                context.startService(new Intent(context, LatencyService.class).putExtra("mac", mac));
+                 return;
+             }
+             if (state == BluetoothDevice.BOND_BONDING) {
+-                Log.i(TAG, "Keyboard bonding is already in progress: " + mac);
++                Log.i(TAG, "Keyboard bonding already in progress: " + mac);
+                 return;
+             }
+-
+             adapter.cancelDiscovery();
+-            boolean started;
+-            try {
+-                Method createBond = BluetoothDevice.class.getMethod("createBond", int.class);
+-                started = (Boolean) createBond.invoke(device, 2 /* TRANSPORT_LE */);
+-            } catch (Throwable hiddenApiFailure) {
+-                Log.w(TAG, "Falling back to automatic transport", hiddenApiFailure);
+-                started = device.createBond();
+-            }
+-            Log.i(TAG, "Keyboard LE bond request started=" + started + ": " + mac);
++            Log.i(TAG, "Keyboard LE bond request started=" + createLeBond(device) + ": " + mac);
+         } catch (Throwable t) {
+             Log.e(TAG, "Keyboard pairing failed", t);
+         }
+     }
+ 
+-    private static void startLatencyService(Context context, String mac) {
+-        Intent service = new Intent(context, LatencyService.class).putExtra("mac", mac);
+-        context.startService(service);
+-    }
+-
+-    private static void disconnectHid(Context context, BluetoothAdapter adapter, BluetoothDevice device) {
+-        adapter.getProfileProxy(context, new BluetoothProfile.ServiceListener() {
+-            @Override public void onServiceConnected(int profile, BluetoothProfile proxy) {
+-                try {
+-                    Method disconnect = proxy.getClass().getMethod("disconnect", BluetoothDevice.class);
+-                    boolean result = (Boolean) disconnect.invoke(proxy, device);
+-                    Log.i(TAG, "HID disconnect on pogo attach=" + result);
+-                } catch (Throwable t) {
+-                    Log.e(TAG, "Unable to disconnect HID on pogo attach", t);
+-                } finally {
+-                    adapter.closeProfileProxy(profile, proxy);
+-                }
+-            }
+-            @Override public void onServiceDisconnected(int profile) {}
+-        }, 4 /* HID_HOST */);
++    static boolean createLeBond(BluetoothDevice device) {
++        try {
++            // Force LE: after a Bluetooth reset Android no longer knows the address is LE-only.
++            Method createBond = BluetoothDevice.class.getMethod("createBond", int.class);
++            return (Boolean) createBond.invoke(device, BluetoothDevice.TRANSPORT_LE);
++        } catch (Throwable hiddenApiFailure) {
++            Log.w(TAG, "createBond(LE) unavailable, using automatic transport", hiddenApiFailure);
++            return device.createBond();
++        }
+     }
+ }

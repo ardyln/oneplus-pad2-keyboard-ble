@@ -1,0 +1,6 @@
+id=pad2_keyboard_ble
+name=OnePlus Pad 2 Keyboard BLE (personal port)
+version=0.7
+versionCode=7
+author=ardy (port of Drun555's Pad 3 module)
+description=Personal Pad 2 port of Drun555's Pad 3 module

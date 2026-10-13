@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="local.pad2kbd.pogopair"
+    android:versionCode="1"
+    android:versionName="0.1">
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
+    <application android:label="Pad2 Kbd Pair" android:directBootAware="true" android:allowBackup="false">
+        <!-- Not exported: only root/system (the module scripts) can reach these. -->
+        <receiver android:name=".PairReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="local.pad2kbd.pogopair.PAIR" />
+            </intent-filter>
+        </receiver>
+        <service android:name=".LatencyService" android:exported="false" android:stopWithTask="false" />
+        <activity android:name=".MainActivity" android:exported="false"
+            android:theme="@android:style/Theme.Material.Light" />
+    </application>
+</manifest>

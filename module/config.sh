@@ -1,0 +1,45 @@
+#!/system/bin/sh
+# All device-specific values for the Pad 2 keyboard module live here.
+# Every other script sources this file; nothing else hardcodes these values.
+
+# --- keyboard identity (Pad 2 Smart Keyboard, collected 2026-10-13) ---
+KBD_MAC=XX:XX:XX:XX:XX:XX
+KBD_VID=8921            # 0x22D9 OnePlus
+KBD_PID=14441           # 0x3869
+
+# --- HID report map repair ---
+# Android reads 512 bytes of the 561-byte map over GATT; the remaining 49 bytes
+# (end of the touchpad collection) are appended from here.
+DESC_TRUNC_BYTES=512
+DESC_FULL_BYTES=561
+DESC_TAIL=0c66011047ffff000027ffff000075109501095681020954250575089501810205091901290115002501750895018102c0
+# Touchpad size fix: the firmware declares Physical Max = Logical Max (2764 x 1630 in 0.01 inch,
+# i.e. 70 x 41 cm), so Android moves the BLE pointer ~6x too fast. These byte swaps (old:new, per
+# finger slot) declare the real 4.73 x 2.79 in (120 x 71 mm) = 23 units/mm, same as pogo_touchpad.
+# Set to empty to disable.
+DESC_SWAPS="46cc0a:46d901 465e06:461701"
+
+# --- attach/detach detection ---
+UEVENT_DEVNAME=pogo_keyboard     # uevent DEVNAME of the pogo driver
+UEVENT_STATUS_VAR=pogopin_status # 1 = attached, 0 = detached
+POGO_INPUT_NAME=pogo_touchpad    # input device present only while attached
+POLL_SECONDS=3
+
+# --- environment ---
+BT_CONFIG=/data/misc/bluedroid/bt_config.conf
+STATE_DIR=/data/adb/pad2kbd      # backups and state (root only)
+LOG_FILE=/data/local/tmp/pad2kbd.log
+LOG_MAX_BYTES=262144
+APP_PKG=local.pad2kbd.pogopair
+MAX_BT_RESTARTS_PER_BOOT=3
+
+# Global hidden-API exemption (hidden_api_policy*=1). Off by default: the companion
+# app is a priv-app and HidCtl runs under app_process, so it should not be needed.
+# Set to 1 only if testing proves otherwise; uninstall restores the old values.
+HIDDEN_API_POLICY=0
+
+# busybox: first one found wins (KernelSU, Magisk, APatch)
+for _bb in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox /data/adb/ap/bin/busybox; do
+    [ -x "$_bb" ] && { BB=$_bb; break; }
+done
+unset _bb
