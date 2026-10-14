@@ -27,12 +27,34 @@ import java.util.UUID;
 /**
  * Read-mostly GATT probe for the OnePlus Stylo 2: subscribes to every notify/indicate characteristic
  * of the vendor services, reads their readable characteristics, and logs every notification.
- * Its only writes are CCC descriptors, which it disables again on exit.
+ * Its only writes are CCC descriptors, which it disables again on exit, plus the allowlisted
+ * commands in {@link #COMMANDS} when they are named with {@code --es cmd name[,name...]}.
  */
 public final class ProbeActivity extends Activity {
     private static final String TAG = "PenProbe";
     private static final UUID CCC = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final String SIG_BASE = "-0000-1000-8000-00805f9b34fb";
+    private static final UUID COM_SERVICE = UUID.fromString("18092dbc-2a69-11ec-8d3d-0242ac130003");
+    private static final UUID COM_WRITE = UUID.fromString("18093046-2a69-11ec-8d3d-0242ac130003");
+    // The only payloads this tool can write; both are sent by the stock app on every connect.
+    private static final java.util.Map<String, byte[]> COMMANDS = java.util.Map.of(
+            "enable", new byte[] {0x2c, (byte) 0x90, 0x01, 0x01, 0x01},  // pencil enabled
+            "disable", new byte[] {0x2c, (byte) 0x90, 0x01, 0x01, 0x00}, // pencil disabled
+            "texture", new byte[] {0x2c, (byte) 0x94, 0x02, 0x00, 0x03}, // pencil texture, default level
+            "texture-off", new byte[] {0x2c, (byte) 0x94, 0x02, 0x00, 0x00}, // writing feedback off (level byte 0)
+            "oneshot", new byte[] {0x2c, (byte) 0x92, 0x01, 0x02, (byte) 0xff, 0x02}); // single vibration
+
+    /** Named command, or "texture:T:L" with the stock ranges: type 0-3, slider level 0-4 (sent as level + 1). */
+    private static byte[] command(String name) {
+        byte[] v = COMMANDS.get(name);
+        if (v != null) return v;
+        String[] p = name.split(":");
+        if (p.length != 3 || !p[0].equals("texture")) return null;
+        int type, level;
+        try { type = Integer.parseInt(p[1]); level = Integer.parseInt(p[2]); } catch (NumberFormatException e) { return null; }
+        if (type < 0 || type > 3 || level < 0 || level > 4) return null;
+        return new byte[] {0x2c, (byte) 0x94, 0x02, (byte) type, (byte) (level + 1)};
+    }
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<Runnable> ops = new ArrayDeque<>();
@@ -40,6 +62,7 @@ public final class ProbeActivity extends Activity {
     private boolean busy;
     private BluetoothGatt gatt;
     private boolean disableMode;
+    private String[] cmds = new String[0];
     private TextView view;
     private ScrollView scroll;
     private final StringBuilder text = new StringBuilder();
@@ -113,6 +136,18 @@ public final class ProbeActivity extends Activity {
                     }
                 }
             }
+            BluetoothGattService com = g.getService(COM_SERVICE);
+            BluetoothGattCharacteristic w = com == null ? null : com.getCharacteristic(COM_WRITE);
+            for (String name : disableMode ? new String[0] : cmds) {
+                byte[] v = command(name);
+                if (v == null || w == null) { out("refusing cmd '" + name + "'"); continue; }
+                queue(() -> {
+                    w.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+                    w.setValue(v);
+                    out("WRITE " + name + " " + hex(v));
+                    if (!g.writeCharacteristic(w)) { out("write failed " + name); done(); }
+                });
+            }
             if (disableMode) {
                 queue(() -> { out("=== all vendor notifications disabled; closing ==="); done(); finish(); });
             } else {
@@ -122,6 +157,11 @@ public final class ProbeActivity extends Activity {
 
         @Override public void onCharacteristicRead(BluetoothGatt g, BluetoothGattCharacteristic c, int status) {
             out("READ " + c.getUuid() + " status=" + status + " value=" + hex(c.getValue()));
+            done();
+        }
+
+        @Override public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic c, int status) {
+            out("WROTE " + c.getUuid() + " status=" + status);
             done();
         }
 
@@ -146,6 +186,8 @@ public final class ProbeActivity extends Activity {
         setContentView(scroll);
         String mac = getIntent().getStringExtra("mac");
         disableMode = getIntent().getBooleanExtra("disable", false);
+        String c = getIntent().getStringExtra("cmd");
+        if (c != null && !c.isEmpty()) cmds = c.split(",");
         if (mac == null || !BluetoothAdapter.checkBluetoothAddress(mac)) {
             out("start with --es mac XX:XX:XX:XX:XX:XX");
             return;
