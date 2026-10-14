@@ -23,11 +23,12 @@ It is reported only over a vendor GATT characteristic that nothing on AOSP subsc
 | Service / characteristic | Props | Meaning (observed) |
 |---|---|---|
 | `18093398-2a69-11ec-8d3d-0242ac130003` / **`180938ac-…`** | notify | **Thumb button**: `01` per touch. No gesture distinction (tap/double/long/slide all `01`), at most ~1 event / 0.75 s, doesn't wake a sleeping pen |
-| `18093398-…` / `1809396a-…` | notify | Charging state: `20` off charger, `21` charging (with `chg evt …` on the console) |
+| `18093398-…` / `1809396a-…` | notify | On the magnetic charger: `20` attached, `21` detached (with `chg evt …` on the console). Corrected 2026-10-14; first noted the other way round |
 | `18093398-…` / `180937bc-…` | notify | Battery level (`64` = 100 %) |
 | `18093398-…` / `180932da-…` | notify | not seen yet |
 | `18092dbc-…` / `18093046-…` | write, notify | Pencil status `2c900101` + `00` idle / `01` active (LineageOS already decodes/acks this) |
-| `18092dbc-…` / `1809314a-…`, `18093212-…` | read | read `64` and `21` (meaning unknown) |
+| `18092dbc-…` / `1809314a-…` | read | battery percent (`64` = 100 %, `60` = 96 %) |
+| `18092dbc-…` / `18093212-…` | read | unknown: read `21` both on and off the magnet; not the charger state |
 | `6e400001-b5a3-f393-e0a9-e50e24dcca9e` (Nordic UART) / `6e400003` | notify | **Firmware debug console**, plain text: `sleep enter/exit`, `film 24` (thumb touch), `chg evt …`, `rx <hex> …` stats every 5 s while awake |
 | NUS / `6e400004` | notify | not seen yet |
 | NUS / `6e400002` | write | console input? **Do not write blindly** |
@@ -85,8 +86,8 @@ license, so only these facts are reused here, no code.
 - Then over BLE (penprobe `--es cmd enable,texture`): `2c 90 01 01 01`, `2c 94 02 00 03`, both `status=0`.
   Right before, the pen had reported `2c 90 01 01 00`. → **Texture felt while writing, in any app.**
 - Still works after screen off/on, and after attaching and detaching the pen on the magnet.
-- In the pen's `2c 90 01 01 xx` status notifications, `xx` followed the charging state (`21` → `01`,
-  `20` → `00`), so it looks like "attached", not "enabled".
+- In the pen's `2c 90 01 01 xx` status notifications, `xx` is `01` when the pen is off the magnet and
+  `00` when it's on it (same as `1809396a` `21`/`20`), so it means "active", not "enabled".
 - Still works after the pen sleeps (console `sleep exit`) and wakes.
 - `2c 90 01 01 00` (stock "disabled"): **texture still felt**, so `2c 90` is not the switch.
 - Bluetooth off/on (pen reconnects): **texture gone**. `pencil_control` still read `3`.
