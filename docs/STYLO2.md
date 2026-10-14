@@ -22,7 +22,7 @@ It is reported only over a vendor GATT characteristic that nothing on AOSP subsc
 
 | Service / characteristic | Props | Meaning (observed) |
 |---|---|---|
-| `18093398-2a69-11ec-8d3d-0242ac130003` / **`180938ac-…`** | notify | **Thumb button**: `01` per touch. No gesture distinction (tap/double/long/slide all `01`), at most ~1 event / 0.75 s, doesn't wake a sleeping pen |
+| `18093398-2a69-11ec-8d3d-0242ac130003` / **`180938ac-…`** | notify | **Thumb button**: `01` per **double tap** (corrected 2026-10-14; single taps, holds and slides send nothing). Events can come ~0.4 s apart. Doesn't wake a sleeping pen. Only sent while other notifications are subscribed too |
 | `18093398-…` / `1809396a-…` | notify | On the magnetic charger: `20` attached, `21` detached (with `chg evt …` on the console). Corrected 2026-10-14; first noted the other way round |
 | `18093398-…` / `180937bc-…` | notify | Battery level (`64` = 100 %) |
 | `18093398-…` / `180932da-…` | notify | not seen yet |
