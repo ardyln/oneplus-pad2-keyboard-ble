@@ -1,4 +1,7 @@
-# OnePlus Stylo 2: thumb button and haptics (research in progress)
+# OnePlus Stylo 2: thumb button and haptics (research notes)
+
+> The result of this research is a separate module: **[oneplus-pad2-stylo2](https://github.com/ardyln/oneplus-pad2-stylo2)**
+> (writing haptics, thumb-button shortcuts, Saber integration). Its `docs/RESEARCH.md` continues these notes.
 
 Status as of 2026-10-14: **writing haptics fully work on PixelOS** (see "Test results"): all textures, all
 levels, off, and the one-shot buzz. The only pen writes so far are CCC descriptors and stock commands
