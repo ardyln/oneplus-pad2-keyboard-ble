@@ -47,6 +47,9 @@ su -c 'echo AA:BB:CC:DD:EE:FF > /data/adb/pad2kbd/keyboard_mac'   # remove the f
 ```
 The module's **Action** button shows the address in use and where it came from.
 
+Later versions show up as module updates in KernelSU (from this repo's releases); changes per
+version are in [CHANGELOG.md](CHANGELOG.md).
+
 Log: `/data/local/tmp/pad2kbd.log`. Status: the module's **Action** button.
 Uninstall: remove the module and reboot; `uninstall.sh` undoes every change.
 Details, recovery commands and test results: [`docs/NOTES.md`](docs/NOTES.md).

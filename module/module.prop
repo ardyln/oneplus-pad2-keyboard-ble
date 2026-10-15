@@ -4,3 +4,4 @@ version=0.8
 versionCode=8
 author=ardy (port of Drun555's Pad 3 module)
 description=Personal Pad 2 port of Drun555's Pad 3 module
+updateJson=https://raw.githubusercontent.com/ardyln/oneplus-pad2-keyboard-ble/main/update.json
