@@ -79,6 +79,17 @@ hidctl() {
     return $_rc
 }
 
+# Installs an APK as a normal app and prints pm's output. pm hands its stdin and output to
+# system_server, so neither may be a pipe (system_server keeps it open while an install waits, and
+# $(...) never returns) nor a file under /data/adb (system_server may not use those fds: "Failed
+# transaction"). The timeout keeps a stuck install from blocking the rest of the boot script.
+install_apk() {
+    _out=/data/local/tmp/pad2-pm-$$.out
+    timeout 120 pm install -r -g "$1" </dev/null > "$_out" 2>&1
+    cat "$_out" 2>/dev/null
+    rm -f "$_out"
+}
+
 # 0 = attached, 1 = detached, 2 = unknown (input service unavailable, e.g. during shutdown)
 pogo_state() {
     _in=$(dumpsys input 2>/dev/null)

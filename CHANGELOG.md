@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9
+- **Fix:** after installing the module (e.g. removing and reinstalling it), the boot script could
+  hang on the app install, and attaching and detaching stopped working. `pm` hands its input and output to
+  Android's system service: a pipe stays open while an install waits, so the script waited for good,
+  and a file under `/data/adb` is refused ("Failed transaction"). pm now reads from `/dev/null` and
+  writes to a file in `/data/local/tmp`, with a 2-minute limit, and the app is only recorded as
+  installed when it worked, so the next boot tries again otherwise. The uevent listener now starts before the install, so attach/detach
+  work even if it fails.
+
 ## 0.8
 - The keyboard's Bluetooth address is found automatically: from the pogo connection while the
   keyboard is attached, else the last keyboard found that way, else the only paired OnePlus keyboard.

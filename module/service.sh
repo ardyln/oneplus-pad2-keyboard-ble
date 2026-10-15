@@ -7,22 +7,6 @@ LOG_TAG=service
 until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
 until [ "$(getprop sys.user.0.ce_available)" = "true" ]; do sleep 2; done
 
-# KernelSU without a mounting metamodule does not overlay system/, so the priv-app copy is
-# never seen. Fall back to installing the APK as a normal app (removed again by uninstall.sh).
-APK="$MODDIR/system/priv-app/Pad2KbdPair/Pad2KbdPair.apk"
-if ! pm path "$APP_PKG" 2>/dev/null | grep -q "^package:/system"; then
-    want=$(sha256sum "$APK" | cut -d' ' -f1)
-    if [ "$(cat "$STATE_DIR/app_sha256" 2>/dev/null)" != "$want" ] || ! pm path "$APP_PKG" >/dev/null 2>&1; then
-        # pm cannot read files under /data/adb; stage a copy it can read.
-        cp -f "$APK" /data/local/tmp/pad2kbd.apk && chmod 0644 /data/local/tmp/pad2kbd.apk
-        out=$(pm install -r -g /data/local/tmp/pad2kbd.apk 2>&1)
-        rm -f /data/local/tmp/pad2kbd.apk
-        log "installed $APP_PKG as a normal app: $out"
-        echo "$want" > "$STATE_DIR/app_sha256"
-        touch "$STATE_DIR/app_user_installed"
-    fi
-fi
-
 # Lets the latency helper start from a background broadcast. Undone by uninstall.sh.
 cmd deviceidle whitelist +"$APP_PKG" >/dev/null 2>&1
 
@@ -43,6 +27,26 @@ if [ -n "$BB" ]; then
     log "uevent listener started (pid $!)"
 else
     log "no busybox: relying on the $POLL_SECONDS s poll only"
+fi
+
+# KernelSU without a mounting metamodule does not overlay system/, so the priv-app copy is
+# never seen. Fall back to installing the APK as a normal app (removed again by uninstall.sh).
+# This runs after the uevent listener has started, so attach/detach work even if it fails.
+mkdir -p "$STATE_DIR"
+APK="$MODDIR/system/priv-app/Pad2KbdPair/Pad2KbdPair.apk"
+if ! pm path "$APP_PKG" 2>/dev/null | grep -q "^package:/system"; then
+    want=$(sha256sum "$APK" | cut -d' ' -f1)
+    if [ "$(cat "$STATE_DIR/app_sha256" 2>/dev/null)" != "$want" ] || ! pm path "$APP_PKG" >/dev/null 2>&1; then
+        # pm cannot read files under /data/adb; stage a copy it can read.
+        cp -f "$APK" /data/local/tmp/pad2kbd.apk && chmod 0644 /data/local/tmp/pad2kbd.apk
+        out=$(install_apk /data/local/tmp/pad2kbd.apk)
+        rm -f /data/local/tmp/pad2kbd.apk
+        log "installed $APP_PKG as a normal app: $out"
+        if echo "$out" | grep -q Success; then
+            echo "$want" > "$STATE_DIR/app_sha256"
+            touch "$STATE_DIR/app_user_installed"
+        fi
+    fi
 fi
 
 # Poll loop: fallback attach/detach detection, plus repair of the report map after a new bond.
