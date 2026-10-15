@@ -1,14 +1,14 @@
-# OnePlus Pad 2 Keyboard BLE (personal port): notes
+# OnePlus Pad 2 Keyboard BLE: notes
 
-Personal port of Drun555's Pad 3 module. **Not for publication.** The upstream repo has no LICENSE, so any public release needs the author's permission.
+Port of Drun555's Pad 3 module. The upstream repo has no license file; its author has been contacted about this port.
 
-- Zip: **`OnePlus_Pad2_Keyboard_BLE-v0.7.zip`** (SHA-256 `ed267535…138e`), built by `tools/build.sh` from `pad2_module/` and `pad2_src/`. v0.1–v0.6 are superseded (see Iterations); this is what's installed.
-- Module id `pad2_keyboard_ble`; companion app `local.pad2kbd.pogopair`, signed with a personal key (`tools/pad2kbd-release.jks`, not in the repo). KernelSU here doesn't mount `system/` (no metamodule), so `service.sh` installs it as a normal app (`/data/app`). `uninstall.sh` removes it.
-- All device values are in `config.sh` (MAC `XX:XX:XX:XX:XX:XX`). After a re-pair with a different keyboard, edit that file only.
+- Zip: from the [releases](https://github.com/ardyln/oneplus-pad2-keyboard-ble/releases) (also in `release/`), built by `tools/build.sh` from `module/`, `PogoPair/` and `HidCtl/`. Older versions are superseded (see Iterations); KernelSU offers new ones as module updates.
+- Module id `pad2_keyboard_ble`; companion app `local.pad2kbd.pogopair`, signed with a personal key (`tools/pad2kbd-release.jks`, not in the repo). KernelSU here doesn't mount `system/` (no metamodule), so `service.sh` installs it as a normal app (`/data/app`), after starting the uevent listener. `uninstall.sh` removes it.
+- Device values are in `config.sh`. The keyboard's address isn't one of them anymore: the module reads it from the pogo connection while the keyboard is attached (or takes the last one found, or the only paired OnePlus keyboard). A different keyboard is picked up when it's attached; to pin one, write its address to `/data/adb/pad2kbd/keyboard_mac`.
 - Log: `/data/local/tmp/pad2kbd.log` (rotates at 256 KB), plus logcat tag `pad2kbd`
 - State/backups: `/data/adb/pad2kbd/` (root only). `bt_config.conf.orig` there contains link keys: never copy it off the tablet.
 
-## Before installing (one-time cleanup of the old Pad 3 test install)
+## Before installing, if the Pad 3 module was ever installed
 | Step | Command | Undo |
 |---|---|---|
 | Remove Pad 3 module | `adb shell su -c 'ksud module uninstall oneplus_pogo_keyboard_ble'` (takes effect on reboot) | reinstall its zip |
@@ -18,11 +18,12 @@ Personal port of Drun555's Pad 3 module. **Not for publication.** The upstream r
 
 ## Install
 ```
-adb push OnePlus_Pad2_Keyboard_BLE-v0.7.zip /data/local/tmp/
-adb shell su -c 'ksud module install /data/local/tmp/OnePlus_Pad2_Keyboard_BLE-v0.7.zip'
+adb push OnePlus_Pad2_Keyboard_BLE-v<version>.zip /data/local/tmp/
+adb shell su -c 'ksud module install /data/local/tmp/OnePlus_Pad2_Keyboard_BLE-v<version>.zip'
 adb reboot
 ```
-Or use the KernelSU app: **Modules → Install from storage**. On Magisk: `magisk --install-module <zip>`.
+Or use the KernelSU app: **Modules → Install from storage**. Magisk (`magisk --install-module <zip>`) should work too but has never been tested.
+After the reboot, unlock once and attach the keyboard, so the module can read its address.
 
 ## Uninstall
 KernelSU app: **Modules → remove**, then reboot, or `adb shell su -c 'ksud module uninstall pad2_keyboard_ble'` and reboot.
@@ -48,9 +49,10 @@ On the next boot `uninstall.sh` does the following:
 - `service.sh` waits for the first unlock after boot (`sys.user.0.ce_available`). Until then, attach/detach isn't handled; the stored map is already fixed at that point.
 - **Shutdown:** at reboot the pogo driver loses the keyboard heartbeat and sends a *real* `pogopin_status=0` uevent. `adb reboot` doesn't set `sys.shutdown.requested`, and Android 17's init doesn't store `sys.powerctl`. The module also checks `persist.sys.boot.reason` (empty at runtime, set by init when shutdown starts) and `init.svc.zygote`, and ignores mode changes during shutdown. A 2 s debounce was tried in v0.5/v0.6 and removed, because it delayed every real detach. If a false detach ever slips through, it's harmless: it's killed, or it leaves the policy at "allowed" until the next unlock.
 - **First detach after a long attach is slow (~13 s observed):** the keyboard's own radio takes that long to start advertising after it switches from pogo power to battery (no Bluetooth activity at all in that window). Detaches shortly after a previous one take 0.2–0.8 s. The keyboard firmware does this; the tablet can't speed it up.
-- **Privacy:** the pogo uevent and kernel log include the keyboard's **serial number** (`report_sn`). The module never logs uevent contents. Saved data in `pad2_data/` has it redacted.
+- **Privacy:** the pogo uevent and kernel log include the keyboard's **serial number** (`report_sn`), and the pogo frames its Bluetooth address. The module never logs uevent contents; it reads only the address from the frames. Saved data in `pad2_data/` has these redacted.
+- **App install from `service.sh` (fixed in v0.9):** `pm` hands its stdin and output to `system_server`. A pipe (`out=$(pm install …)`) stays open while an install waits, so the script waited for good, and a file under `/data/adb` is refused (`Failed transaction`). That stopped attach/detach after a reinstall. `pm` now reads from `/dev/null` and writes to a file in `/data/local/tmp`, with a 2-minute limit, and the app is only recorded as installed when that worked.
 
-## Test results (2026-10-13, PixelOS 17 caihong, KernelSU 3.3.0)
+## Test results (PixelOS 17 caihong, KernelSU 3.3.0; 2026-10-13 unless noted)
 Logs: `pad2_data/phase5_tests/` (module log + filtered logcat, no keys).
 
 | # | Test | Result |
@@ -64,6 +66,8 @@ Logs: `pad2_data/phase5_tests/` (module log + filtered logcat, no keys).
 | 7 | Uninstall (v0.3 → v0.4 retest) | v0.3: map restored, app/whitelist/state removed, but `hidctl allow` crashed (rc=139, early mount namespace without ART). **v0.4: pass**, all items undone, policy set to allowed. Android re-forbids it 10 s later because the restored 512 B map fails, which is stock behaviour. |
 | 8 | No false detach at shutdown | v0.3–v0.5: still logged. v0.6/v0.7: **pass** on 3 reboots |
 | 9 | Real-detach regression (v0.7) | **Pass.** BLE input 0.2–0.8 s after the detach uevent; first detach after a long attach ~13 s (keyboard-side, see Known issues) |
+| 10 | Address detection (v0.8, 2026-10-15) | **Pass.** With the cache deleted, the address was read from the pogo frames and matched the paired keyboard; detach → BLE (`resume`, rc=0), attach → pogo (`suspend`, rc=0); a pinned address took precedence |
+| 11 | Remove and reinstall the module, reboot (v0.9, 2026-10-15) | **Pass.** v0.8 had hung on the app install (attach/detach stopped working). v0.9: the listener started first, the app installed at boot (`Success`), attach handled |
 
 Iterations:
 - v0.1: the priv-app was never mounted (KernelSU without a metamodule).
@@ -73,3 +77,5 @@ Iterations:
 - v0.5: 2 s detach debounce + trigger-source logging. Logcat showed the real cause: a genuine kernel uevent at reboot.
 - v0.6: also check `persist.sys.boot.reason` and `init.svc.zygote`.
 - v0.7: removed the 2 s debounce (it delayed every real detach); kept the instant shutdown check and source logging.
+- v0.8: the keyboard's address is detected (pogo frames, cache, or the paired keyboard) instead of being set in `config.sh`; a pinned address can override it; module updates through KernelSU.
+- v0.9: the app install can't block the boot script anymore (see Known issues), and the uevent listener starts first; installer shows "by ardy".

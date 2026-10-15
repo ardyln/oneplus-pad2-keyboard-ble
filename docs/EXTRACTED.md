@@ -7,7 +7,7 @@ Note: `dmesg.txt`/`logcat.txt` contain raw pogo UART frames (`POGO_KB … show_b
 
 | Item | Value | Source |
 |---|---|---|
-| Keyboard BLE MAC | `XX:XX:XX:XX:XX:XX` (public address, LE-only) | `bt_config_nokeys.txt` section; also inside every pogo frame, little-endian `xx xx xx xx xx xx` |
+| Keyboard BLE MAC | `XX:XX:XX:XX:XX:XX` (public address, LE-only) | `bt_config_nokeys.txt` section; also inside every pogo frame, little-endian (the module reads it from there, see `resolve_kbd_mac` in `module/common.sh`) |
 | VID / PID | 8921 / 14441 (0x22D9 / 0x3869), same as the Pad 3 keyboard | `HogpVendorId/HogpProductId`, and the pogo input devices `Vendor=22d9 Product=3869` |
 | Stored report map | 512 bytes (1024 hex), the same in all three snapshots (md5 of line `a40241902b67…`) | `HogpDescriptor` |
 | Truncation point | Byte 511 = `0x55` (Unit Exponent), its 1-byte argument cut off | `tools/hid_parse.py` |

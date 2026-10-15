@@ -16,7 +16,7 @@
 | 12 | KernelSU doesn't mount `system/`, so the APK is installed as a user app | **Same.** KernelSU 3.x without a mounting metamodule doesn't mount `system/`. (I first misread bindhosts as proof that it does; bindhosts has `skip_mount` and bind-mounts itself.) v0.2 installs the APK as a normal app. | **same** |
 | 13 | Hidden API: `HidCtl` via root `app_process` (Android 15/16 framework) | Works unchanged on Android 17, with **no** global `hidden_api_policy` change | **same** (verified in Phase 5) |
 | 14 | `bt_config.conf` at `/data/misc/bluedroid/` | same | **same** |
-| 15 | No MAC on the pogo side | The pogo UART frame carries the MAC (dmesg only, no sysfs node) | **not applicable** (could auto-detect later; not needed) |
+| 15 | No MAC on the pogo side | The pogo UART frame carries the MAC (dmesg only, no sysfs node) | **used since v0.8:** the module reads the attached keyboard's address from these frames |
 | 16 | HID_HOST policy stays ALLOWED until the module changes it | The Android 17 stack **auto-forbids** it 10 s after connecting, because the 512-byte map fails the kernel HID parser (`item fetching failed at offset 511/512`). Confirmed by experiment; see `pad2_data/EXTRACTED.md` | **different**: fix the descriptor *before* connecting, then `HidCtl resume` (policy 100) |
 
 ## Key questions from the brief

@@ -1,6 +1,6 @@
 # ANALYSIS — Drun555 "OnePlus Pad 3 Keyboard BLE" KernelSU module v1.7
 
-Personal analysis for porting to OnePlus Pad 2 (`caihong`). Not for publication (upstream repo has no LICENSE).
+Analysis of the Pad 3 module, written for porting it to the OnePlus Pad 2 (`caihong`). The upstream repo has no license file; its author has been contacted about this port.
 
 ## Sources examined
 

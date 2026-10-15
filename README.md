@@ -4,14 +4,15 @@ A KernelSU module (Magisk-compatible layout) that lets the **OnePlus Pad 2 Smart
 **detached over Bluetooth LE** on AOSP-based ROMs (tested on PixelOS 17 for `caihong`). On these ROMs
 the keyboard normally only works while attached to the pogo pins.
 
-This is a personal port of **[Drun555/oneplus-pad3-keyboard-ble](https://github.com/Drun555/oneplus-pad3-keyboard-ble)**
+This is a port of **[Drun555/oneplus-pad3-keyboard-ble](https://github.com/Drun555/oneplus-pad3-keyboard-ble)**
 (OnePlus Pad 3 module v1.7). All credit for the original approach goes to that project. The port, the
 analysis and this repo were produced with an AI assistant (Claude); the upstream module is credited
 as AI-generated too.
 
 > **Status:** works on the author's tablet. Use at your own risk. The module edits
 > `/data/misc/bluedroid/bt_config.conf` (with a backup, and undone on uninstall).
-> Upstream has no license file, so this repo doesn't add one either.
+> Upstream has no license file, and its author has been contacted about this port; until that's
+> settled this repo doesn't add a license of its own.
 
 ## What it does
 | Problem on AOSP | Fix |
@@ -75,7 +76,8 @@ The docs were written during development and refer to the original working folde
 `module/`, `pad2_src/` → `PogoPair/` + `HidCtl/`, `pad2_data/` (raw collection, not published).
 
 ## Known limitations
-- KernelSU without a mounting metamodule doesn't overlay `system/`, so the companion app is installed as a normal app.
+- KernelSU without a mounting metamodule doesn't overlay `system/`, so the companion app is installed as a normal app
+  (after the uevent listener has started, so attach/detach work even if that install fails).
 - After a long time on the pins, the first detach can take ~13 s: the keyboard's radio is slow to start advertising.
 - Attach/detach handling starts after the first unlock following a boot.
 
