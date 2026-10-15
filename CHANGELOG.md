@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10
+- **Fix:** with both Pad 2 modules installed at once, only one app got installed. Android may ask
+  you to allow each app's install but shows one such prompt at a time, so the second install waited
+  for good. The two modules now take turns, each install gets 5 minutes, and the time limit now
+  stops the install itself. Whether the app is installed is checked by comparing the installed APK
+  with the module's, so an install you allow late is recognised at the next boot.
+
 ## 0.9
 - **Fix:** after installing the module (e.g. removing and reinstalling it), the boot script could
   hang on the app install, and attaching and detaching stopped working. `pm` hands its input and output to

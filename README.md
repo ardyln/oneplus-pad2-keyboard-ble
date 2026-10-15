@@ -28,8 +28,10 @@ Attach/detach is detected from the pogo driver's uevent (`pogo_keyboard`, `pogop
 ## Use
 1. Download the zip from [Releases](https://github.com/ardyln/oneplus-pad2-keyboard-ble/releases) and
    install it with KernelSU (Magisk should work too, but hasn't been tested), then reboot.
-2. Unlock the tablet once after boot and **attach the keyboard**: the module reads the keyboard's
-   Bluetooth address from the pogo connection, so there's nothing to look up or type in.
+2. Unlock the tablet once after boot. If Android asks you to allow installing the module's app,
+   allow it (with the Stylo 2 module installed too, a second prompt follows for its app). Then
+   **attach the keyboard**: the module reads the keyboard's Bluetooth address from the pogo
+   connection, so there's nothing to look up or type in.
 3. Detach the keyboard and accept the pairing prompt the first time.
 
 ### Which keyboard

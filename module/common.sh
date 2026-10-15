@@ -79,15 +79,33 @@ hidctl() {
     return $_rc
 }
 
-# Installs an APK as a normal app and prints pm's output. pm hands its stdin and output to
-# system_server, so neither may be a pipe (system_server keeps it open while an install waits, and
-# $(...) never returns) nor a file under /data/adb (system_server may not use those fds: "Failed
-# transaction"). The timeout keeps a stuck install from blocking the rest of the boot script.
+# Installs an APK as a normal app and prints the install's output.
+# - Android may ask the user to allow the install and shows one such prompt at a time, so the Pad 2
+#   modules take turns (a lock shared by both), and each install gets 5 minutes.
+# - cmd package (what /system/bin/pm wraps) is called directly, so the time limit stops the install
+#   itself, not just the wrapper.
+# - Its stdin and output are neither a pipe nor a file under /data/adb: system_server keeps a pipe
+#   open while an install waits, and refuses fds of /data/adb files ("Failed transaction").
+INSTALL_LOCK=/dev/pad2-install.lock
 install_apk() {
     _out=/data/local/tmp/pad2-pm-$$.out
-    timeout 120 pm install -r -g "$1" </dev/null > "$_out" 2>&1
+    _i=0
+    until mkdir "$INSTALL_LOCK" 2>/dev/null; do
+        _i=$((_i + 1)); [ $_i -ge 1200 ] && break   # give up waiting after 20 minutes
+        sleep 1
+    done
+    timeout 300 cmd package install -r -g "$1" </dev/null > "$_out" 2>&1
+    rmdir "$INSTALL_LOCK" 2>/dev/null
     cat "$_out" 2>/dev/null
     rm -f "$_out"
+}
+
+# True when the installed app $1 is exactly the APK with sha256 $2 (Android keeps the file as is),
+# so an install that was allowed late or finished after the time limit counts at the next boot.
+app_current() {
+    _p=$(pm path "$1" </dev/null 2>/dev/null | head -n 1)
+    _p=${_p#package:}
+    [ -n "$_p" ] && [ "$(sha256sum "$_p" 2>/dev/null | cut -d' ' -f1)" = "$2" ]
 }
 
 # 0 = attached, 1 = detached, 2 = unknown (input service unavailable, e.g. during shutdown)

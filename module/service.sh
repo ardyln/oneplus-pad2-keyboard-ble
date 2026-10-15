@@ -36,17 +36,15 @@ mkdir -p "$STATE_DIR"
 APK="$MODDIR/system/priv-app/Pad2KbdPair/Pad2KbdPair.apk"
 if ! pm path "$APP_PKG" 2>/dev/null | grep -q "^package:/system"; then
     want=$(sha256sum "$APK" | cut -d' ' -f1)
-    if [ "$(cat "$STATE_DIR/app_sha256" 2>/dev/null)" != "$want" ] || ! pm path "$APP_PKG" >/dev/null 2>&1; then
-        # pm cannot read files under /data/adb; stage a copy it can read.
+    if ! app_current "$APP_PKG" "$want"; then
+        # The package manager can't read files under /data/adb; stage a copy it can read.
         cp -f "$APK" /data/local/tmp/pad2kbd.apk && chmod 0644 /data/local/tmp/pad2kbd.apk
         out=$(install_apk /data/local/tmp/pad2kbd.apk)
         rm -f /data/local/tmp/pad2kbd.apk
-        log "installed $APP_PKG as a normal app: $out"
-        if echo "$out" | grep -q Success; then
-            echo "$want" > "$STATE_DIR/app_sha256"
-            touch "$STATE_DIR/app_user_installed"
-        fi
+        log "installed $APP_PKG as a normal app: ${out:-no answer within 5 minutes}"
     fi
+    # Remembered for uninstall.sh, which removes the app only if this module installed it
+    app_current "$APP_PKG" "$want" && touch "$STATE_DIR/app_user_installed"
 fi
 
 # Poll loop: fallback attach/detach detection, plus repair of the report map after a new bond.

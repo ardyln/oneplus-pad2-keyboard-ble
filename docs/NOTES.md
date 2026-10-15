@@ -79,3 +79,4 @@ Iterations:
 - v0.7: removed the 2 s debounce (it delayed every real detach); kept the instant shutdown check and source logging.
 - v0.8: the keyboard's address is detected (pogo frames, cache, or the paired keyboard) instead of being set in `config.sh`; a pinned address can override it; module updates through KernelSU.
 - v0.9: the app install can't block the boot script anymore (see Known issues), and the uevent listener starts first; installer shows "by ardy".
+- v0.10: with the Stylo 2 module installed at the same time, only one app got installed: Android shows one install prompt at a time. The two modules now take turns (shared lock `/dev/pad2-install.lock`), install with `cmd package install` directly under a 5-minute limit, and check the installed APK against the module's.
