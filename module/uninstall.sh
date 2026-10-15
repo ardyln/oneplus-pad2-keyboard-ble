@@ -34,7 +34,7 @@ cp -f "$MODDIR/hidctl.jar" "$MODDIR/config.sh" "$MODDIR/common.sh" "$WORK/"
         log "hidden_api_policy* restored"
     fi
     # Leave the keyboard's HID policy at the Android default (allowed), never stuck at forbidden.
-    hidctl allow "$KBD_MAC"
+    [ -n "$KBD_MAC" ] && hidctl allow "$KBD_MAC"
     log "uninstall complete; removing $STATE_DIR (bt_config backup included)"
     rm -rf "$STATE_DIR"
 ) </dev/null >/dev/null 2>&1 &

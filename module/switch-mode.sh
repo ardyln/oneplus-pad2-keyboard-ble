@@ -32,6 +32,18 @@ if [ "$2" != "force" ] && [ "$(cat "$STATE_DIR/mode" 2>/dev/null)" = "$MODE" ]; 
 fi
 echo "$MODE" > "$STATE_DIR/mode"
 
+# Right after attaching, the pogo driver needs a moment before its frames (with the keyboard's
+# address) show up in the kernel log; a new keyboard is picked up here.
+if [ "$MODE" = attached ] && [ "$KBD_MAC_SOURCE" != config ] && [ "$KBD_MAC_SOURCE" != override ]; then
+    i=0
+    until [ -n "$(mac_from_pogo)" ] || [ $i -ge 10 ]; do sleep 0.5; i=$((i + 1)); done
+    resolve_kbd_mac
+fi
+if [ -z "$KBD_MAC" ]; then
+    log "keyboard address unknown: attach the keyboard once, or write it to $MAC_OVERRIDE_FILE"
+    exit 0
+fi
+
 case "$MODE" in
     attached)
         log "pogo attached (${SRC:-?}) -> suspend BLE HID for $KBD_MAC"

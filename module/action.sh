@@ -6,7 +6,21 @@ LOG_TAG=action
 . "$MODDIR/common.sh"
 
 if is_attached; then NOW=attached; else NOW=detached; fi
-echo "Keyboard: $KBD_MAC  pogo: $NOW"
+case "$KBD_MAC_SOURCE" in
+    config) SRCTXT="set in config.sh" ;;
+    override) SRCTXT="pinned in $MAC_OVERRIDE_FILE" ;;
+    pogo) SRCTXT="read from the attached keyboard" ;;
+    detected) SRCTXT="last keyboard that was attached" ;;
+    paired) SRCTXT="the paired OnePlus keyboard" ;;
+    *) SRCTXT="unknown" ;;
+esac
+if [ -z "$KBD_MAC" ]; then
+    echo "Keyboard address: not found yet. Attach the keyboard to the tablet once and press this"
+    echo "button again, or pin it: echo AA:BB:CC:DD:EE:FF > $MAC_OVERRIDE_FILE"
+    exit 0
+fi
+echo "Keyboard: $KBD_MAC ($SRCTXT)  pogo: $NOW"
+echo "Another keyboard is picked up when it's attached. To pin one: echo AA:BB:CC:DD:EE:FF > $MAC_OVERRIDE_FILE"
 SRC=action sh "$MODDIR/switch-mode.sh" "$NOW" force
 sh "$MODDIR/descriptor-fix.sh" check
 case $? in

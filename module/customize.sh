@@ -18,4 +18,5 @@ for f in post-fs-data.sh service.sh uninstall.sh action.sh switch-mode.sh \
     set_perm "$MODPATH/$f" 0 0 0755
 done
 ui_print "- Log file: /data/local/tmp/pad2kbd.log"
-ui_print "- Keyboard MAC and other values: $MODPATH/config.sh"
+ui_print "- The keyboard's address is found automatically: attach the keyboard once."
+ui_print "  To pin a specific keyboard: echo AA:BB:CC:DD:EE:FF > /data/adb/pad2kbd/keyboard_mac"

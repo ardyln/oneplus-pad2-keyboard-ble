@@ -3,7 +3,10 @@
 # Every other script sources this file; nothing else hardcodes these values.
 
 # --- keyboard identity (Pad 2 Smart Keyboard, collected 2026-10-13) ---
-KBD_MAC=XX:XX:XX:XX:XX:XX
+# The keyboard's Bluetooth address. Leave empty: the module finds it by itself (see
+# resolve_kbd_mac in common.sh). To pin a specific keyboard without rebuilding the module, write its
+# address to /data/adb/pad2kbd/keyboard_mac instead (survives module updates).
+KBD_MAC=
 KBD_VID=8921            # 0x22D9 OnePlus
 KBD_PID=14441           # 0x3869
 

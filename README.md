@@ -25,10 +25,27 @@ Attach/detach is detected from the pogo driver's uevent (`pogo_keyboard`, `pogop
 `dumpsys input` poll as a fallback.
 
 ## Use
-1. **Edit `module/config.sh`**: at minimum `KBD_MAC`, your keyboard's BLE address (Settings → Bluetooth
-   after pairing, or in the pogo uevent `mac_addr`). The release zip is built for the author's keyboard.
-2. Build (below), then `ksud module install <zip>` (or install from the KernelSU / Magisk app) and reboot.
-3. Unlock the tablet once after boot; detach the keyboard; accept the pairing prompt the first time.
+1. Download the zip from [Releases](https://github.com/ardyln/oneplus-pad2-keyboard-ble/releases) and
+   install it with KernelSU (Magisk should work too, but hasn't been tested), then reboot.
+2. Unlock the tablet once after boot and **attach the keyboard**: the module reads the keyboard's
+   Bluetooth address from the pogo connection, so there's nothing to look up or type in.
+3. Detach the keyboard and accept the pairing prompt the first time.
+
+### Which keyboard
+The module finds the keyboard's address by itself, in this order:
+1. `KBD_MAC` in `module/config.sh`, if you build the module for one keyboard (empty by default);
+2. `/data/adb/pad2kbd/keyboard_mac`, if you pin a keyboard there (see below);
+3. the keyboard attached right now: the pogo driver writes its address to the kernel log about every
+   100 ms while it's attached;
+4. the last keyboard that was attached;
+5. the paired OnePlus keyboard in Android's Bluetooth settings, if exactly one is paired.
+
+So a different keyboard is picked up as soon as you attach it. To always use one keyboard, for example
+with several paired, pin its address without rebuilding (it survives module updates):
+```
+su -c 'echo AA:BB:CC:DD:EE:FF > /data/adb/pad2kbd/keyboard_mac'   # remove the file to go back to automatic
+```
+The module's **Action** button shows the address in use and where it came from.
 
 Log: `/data/local/tmp/pad2kbd.log`. Status: the module's **Action** button.
 Uninstall: remove the module and reboot; `uninstall.sh` undoes every change.
@@ -45,11 +62,11 @@ Keep your keystore: later app updates must be signed with the same key.
 ## Layout
 | Path | Contents |
 |---|---|
-| `module/` | Module scripts; all device values in `config.sh` |
+| `module/` | Module scripts; all device values in `config.sh` (the keyboard's address is detected, see above) |
 | `PogoPair/`, `HidCtl/` | Companion app (pairing + latency) and the root `app_process` HID-policy helper |
 | `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher) |
 | `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `pad2_vs_pad3.diff` |
-| `release/` | The build installed on the author's tablet (contains the author's keyboard MAC) |
+| `release/` | The current build, also attached to the GitHub releases |
 
 The docs were written during development and refer to the original working folders: `pad2_module/` →
 `module/`, `pad2_src/` → `PogoPair/` + `HidCtl/`, `pad2_data/` (raw collection, not published).
