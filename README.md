@@ -83,11 +83,11 @@ The docs were written during development and refer to the original working folde
 - After a long time on the pins, the first detach can take ~13 s: the keyboard's radio is slow to start advertising.
 - Attach/detach handling starts after the first unlock following a boot.
 - Pairing the keyboard with another device (e.g. a PC) makes it ignore the tablet while that device's
-  Bluetooth is on, even if the keyboard is blocked there. To get it back: **remove** the keyboard on
-  the other device (or turn its Bluetooth off), forget the keyboard on the tablet, turn the tablet's
-  Bluetooth off and on, then attach and detach the keyboard and accept the pairing notification.
-  Don't pair it from "Pair new device" in Settings: Android then tries classic Bluetooth, which the
-  keyboard doesn't have, and it never connects.
+  Bluetooth is on, even if the keyboard is blocked there. The tablet's pairing is kept: **remove** the
+  keyboard on the other device (or turn its Bluetooth off) and it reconnects to the tablet.
+- If you ever need to pair it with the tablet again, forget it in Settings, turn Bluetooth off and on,
+  then attach and detach the keyboard and accept the pairing notification. Don't use "Pair new device":
+  Android then tries classic Bluetooth, which the keyboard doesn't have, and it never connects.
 
 ## Linux PC
 The keyboard also works over Bluetooth on Linux without this module (Linux reads the whole report
