@@ -22,8 +22,9 @@ evdev:name:OnePlus Pad Smart Keyboard Touchpad:*
 #   Search     sends Keyboard F23        (0x070072)
 #   Microphone sends Keyboard F13        (0x070068), which GNOME treats as "open Settings"
 #   Lock       sends Keyboard F24        (0x070073). Mapped to KEY_SCREENSAVER, not KEY_SCREENLOCK:
-#              GNOME (mutter 51) files its lock shortcut (XF86ScreenSaver) only under KEY_SCREENSAVER,
-#              so KEY_SCREENLOCK does nothing there. See docs/KEYBOARDS.md.
+#              mutter looks up GNOME's lock shortcut "XF86ScreenSaver" case-insensitively and gets the
+#              newer keysym XF86Screensaver (KEY_SCREENSAVER), so KEY_SCREENLOCK does nothing in GNOME.
+#              See docs/KEYBOARDS.md; switch back to screenlock once mutter is fixed.
 evdev:name:OnePlus Pad Smart Keyboard:*
 evdev:name:OnePlus Pad Smart Keyboard Consumer Control:*
  KEYBOARD_KEY_c0224=esc

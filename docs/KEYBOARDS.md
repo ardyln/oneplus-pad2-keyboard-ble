@@ -66,14 +66,27 @@ so Linux sees a 691 × 407 mm pad and the pointer moves far too fast. The real p
 which is 23 units/mm on both axes. That matches the device tree's `touchpad-xy-resolution = <23 23>`
 for `caihong`, and the 8,640 mm² touchpad area given in [reviews][gsmarena].
 
-**Lock key and GNOME:** GNOME's lock shortcut is the keysym XF86ScreenSaver. In the keymap (xkb-data 2.48,
-libxkbcommon 1.13) that keysym is on two keys: `KEY_SCREENLOCK` (Linux 152, xkb 160) and `KEY_SCREENSAVER`
-(Linux 581, xkb 589). On the test laptop (Ubuntu 26.10, GNOME/mutter 51), mutter registers the shortcut only
-under xkb 589: in Looking Glass, `global.display.get_keybinding_action(160, 0)` is 0 and `(589, 0)` is the
-shortcut's ID. So a key mapped to `screenlock`, the code systemd's existing lock-key entries use, reaches
-applications as XF86ScreenSaver but doesn't lock; mapped to `screensaver`, it locks (GNOME Shell reports
-`AcceleratorActivated` and calls `org.gnome.ScreenSaver.Lock`). Why mutter skips xkb 160 isn't pinned down
-yet; it looks like a mutter bug that would affect any keyboard with a standard lock key.
+**Lock key and GNOME:** GNOME's lock shortcut is the text `XF86ScreenSaver`. Mutter turns shortcut
+text into a keysym case-insensitively (`xkb_keysym_from_name(…, XKB_KEYSYM_CASE_INSENSITIVE)` in
+[`src/core/meta-accel-parse.c`][accel]). Newer libxkbcommon (checked: 1.13.1, xkb-data 2.48) has two keysyms
+whose names differ only in case:
+
+| Keysym | Value | Key it's on |
+|---|---|---|
+| `XF86ScreenSaver` | 0x1008ff2d | `KEY_SCREENLOCK` (Linux 152, xkb 160) |
+| `XF86Screensaver` | 0x10081245 | `KEY_SCREENSAVER` (Linux 581, xkb 589) |
+
+A case-insensitive lookup of `XF86ScreenSaver` returns **0x10081245**, the newer one. So GNOME's lock
+shortcut ends up on `KEY_SCREENSAVER` only, and a key sending `KEY_SCREENLOCK`, the code systemd's existing
+lock-key entries use, never locks. Checked on Ubuntu 26.10 / GNOME 51 in Looking Glass:
+`global.display.get_keybinding_action(160, 0)` is 0 and `(589, 0)` is the lock shortcut's ID, and a test grab
+of `<Shift>XF86ScreenSaver` also lands on 589 only. Mapped to `screensaver`, the Lock key locks (GNOME Shell
+reports `AcceleratorActivated` and calls `org.gnome.ScreenSaver.Lock`). This matches the open report
+[mutter #3990][m3990] (GNOME 46 and later). A fix would be to look the name up exactly first and fall back to
+the case-insensitive lookup only if that finds nothing.
+
+This repo's Linux file therefore maps Lock to `screensaver`. Once mutter is fixed, GNOME's shortcut moves to
+`KEY_SCREENLOCK` and the mapping should go back to `screenlock`.
 
 Testing key codes by changing a running device's keymap (`EVIOCSKEYCODE`) doesn't work under GNOME: libinput
 drops codes the device didn't list when it appeared. Change the hwdb and reconnect instead.
@@ -93,3 +106,5 @@ keyboard is blocked there; the tablet's pairing is kept. See the README.
 [gamersky]: https://www.gamersky.com/tech/202510/2035801.shtml
 [pad4]: https://digitalwalker.ph/products/smart-keyboard-for-oneplus-pad-4
 [gsmarena]: https://m.gsmarena.com/oneplus_pad_2_in_for_review-news-63742.php
+[accel]: https://gitlab.gnome.org/GNOME/mutter/-/blob/main/src/core/meta-accel-parse.c
+[m3990]: https://gitlab.gnome.org/GNOME/mutter/-/work_items/3990
