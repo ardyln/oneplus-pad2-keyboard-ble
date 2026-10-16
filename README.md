@@ -92,7 +92,8 @@ The docs were written during development and refer to the original working folde
 ## Linux PC
 The keyboard also works over Bluetooth on Linux without this module (Linux reads the whole report
 map). [`linux/61-oneplus-pad-keyboard.hwdb`](linux/61-oneplus-pad-keyboard.hwdb) fixes the touchpad
-speed and the Esc, Search, microphone and Lock keys; installing it is described in the file. Pairing with a PC takes the keyboard away from the tablet until you remove
+speed and the Esc, Search, microphone and Lock keys; installing it is described in the file. In GNOME the
+Lock key doesn't lock the screen yet, because of a GNOME bug (see docs/KEYBOARDS.md). Pairing with a PC takes the keyboard away from the tablet until you remove
 it on the PC again (see above).
 [docs/KEYBOARDS.md](docs/KEYBOARDS.md) has the details: key codes, the touchpad, and how the keyboards of
 other OnePlus/OPPO tablets are named.

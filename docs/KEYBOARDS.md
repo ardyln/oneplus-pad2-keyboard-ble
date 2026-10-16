@@ -56,7 +56,7 @@ Tested over Bluetooth on Ubuntu 26.10 (GNOME, Wayland). Linux reads the whole HI
 | Esc | Consumer AC Back (0x0c0224) | Back, does nothing | `esc` |
 | Microphone | Keyboard F13 (0x070068) | GNOME opens Settings | `micmute` |
 | Search | Keyboard F23 (0x070072) | nothing | `search` |
-| Lock | Keyboard F24 (0x070073) | nothing | `screenlock` in the systemd proposal; `screensaver` in this repo's file, because GNOME doesn't react to `screenlock` (see below) |
+| Lock | Keyboard F24 (0x070073) | nothing | `screenlock`, as systemd maps other lock keys; GNOME doesn't lock on it yet because of a mutter bug (see below) |
 | Brightness down | Consumer brightness down **and** Keyboard F16 (0x07006b) | works (F16 is ignored) | none |
 | Brightness up, screenshot, media, volume, Delete | standard codes | work | none |
 | Touchpad toggle | handled inside the keyboard | works | none |
@@ -85,8 +85,10 @@ reports `AcceleratorActivated` and calls `org.gnome.ScreenSaver.Lock`). This mat
 [mutter #3990][m3990] (GNOME 46 and later). A fix would be to look the name up exactly first and fall back to
 the case-insensitive lookup only if that finds nothing.
 
-This repo's Linux file therefore maps Lock to `screensaver`. Once mutter is fixed, GNOME's shortcut moves to
-`KEY_SCREENLOCK` and the mapping should go back to `screenlock`.
+This repo's Linux file still maps Lock to `screenlock`, the same as systemd's hwdb does for other lock keys:
+the bug is mutter's to fix, and mapping the key to `screensaver` would only work around it. Until mutter is
+fixed, the Lock key doesn't lock the screen in GNOME; other desktops that handle `KEY_SCREENLOCK` aren't
+affected.
 
 Testing key codes by changing a running device's keymap (`EVIOCSKEYCODE`) doesn't work under GNOME: libinput
 drops codes the device didn't list when it appeared. Change the hwdb and reconnect instead.
