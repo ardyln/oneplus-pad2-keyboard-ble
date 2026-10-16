@@ -85,6 +85,18 @@ reports `AcceleratorActivated` and calls `org.gnome.ScreenSaver.Lock`). This mat
 [mutter #3990][m3990] (GNOME 46 and later). A fix would be to look the name up exactly first and fall back to
 the case-insensitive lookup only if that finds nothing.
 
+In plain terms, the key and the shortcut are translated separately, and only the shortcut goes wrong:
+
+1. **The key:** the keyboard sends HID usage 0x070073; the hwdb turns it into `KEY_SCREENLOCK`; GNOME's keymap
+   names that key `XF86ScreenSaver` (capital S), and applications receive exactly that.
+2. **The shortcut:** GNOME stores its lock shortcut as the text "XF86ScreenSaver"; mutter's case-insensitive
+   lookup turns that text into `XF86Screensaver` (small s), the name of the other key, `KEY_SCREENSAVER`.
+3. The key arrives as `XF86ScreenSaver` while the shortcut waits for `XF86Screensaver`, so nothing locks.
+   Nothing is dropped; the two simply don't match.
+
+This affects more than this keyboard: systemd's `60-keyboard.hwdb` (checked in October 2026) has 14 lines that
+map a lock key to `screenlock`, and none of those keys lock the screen in GNOME.
+
 This repo's Linux file still maps Lock to `screenlock`, the same as systemd's hwdb does for other lock keys:
 the bug is mutter's to fix, and mapping the key to `screensaver` would only work around it. Until mutter is
 fixed, the Lock key doesn't lock the screen in GNOME; other desktops that handle `KEY_SCREENLOCK` aren't
