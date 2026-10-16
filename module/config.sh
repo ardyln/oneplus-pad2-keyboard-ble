@@ -11,11 +11,15 @@ KBD_VID=8921            # 0x22D9 OnePlus
 KBD_PID=14441           # 0x3869
 
 # --- HID report map repair ---
-# Android reads 512 bytes of the 561-byte map over GATT; the remaining 49 bytes
-# (end of the touchpad collection) are appended from here.
+# Android reads 512 bytes of the 563-byte map over GATT; the remaining 51 bytes
+# (end of the touchpad collection) are appended from here. Read from the keyboard itself
+# over BlueZ on a Linux PC (2026-10-16), which fetches the whole map.
 DESC_TRUNC_BYTES=512
-DESC_FULL_BYTES=561
-DESC_TAIL=0c66011047ffff000027ffff000075109501095681020954250575089501810205091901290115002501750895018102c0
+DESC_FULL_BYTES=563
+DESC_TAIL=0c66011047ffff000027ffff000075109501050d095681020954257f95017508810205090901250175019501810295078103c0
+# Tails written by older module versions (v0.1-v0.10: 49 bytes inferred from the Pad 3).
+# A map ending in one of these is upgraded to DESC_TAIL, and restore recognizes them.
+DESC_OLD_TAILS=0c66011047ffff000027ffff000075109501095681020954250575089501810205091901290115002501750895018102c0
 # Touchpad size fix: the firmware declares Physical Max = Logical Max (2764 x 1630 in 0.01 inch,
 # i.e. 70 x 41 cm), so Android moves the BLE pointer ~6x too fast. These byte swaps (old:new, per
 # finger slot) declare the real 4.73 x 2.79 in (120 x 71 mm) = 23 units/mm, same as pogo_touchpad.

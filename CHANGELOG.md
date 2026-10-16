@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11
+- **Fix:** the last 51 bytes of the keyboard's HID report map (the end of the touchpad description)
+  are now the real ones, read from the keyboard over Bluetooth on a Linux PC. Earlier versions used
+  49 bytes inferred from the Pad 3. A map already repaired by an older version is upgraded at the
+  next boot, and restoring the original map recognises both.
+- New: `linux/61-oneplus-pad-keyboard.hwdb` for using the keyboard with a Linux PC (touchpad
+  speed, Esc, Search and microphone keys).
+- README: how to get the keyboard back after pairing it with another device (removing it there is
+  needed; blocking it isn't enough).
+
 ## 0.10
 - **Fix:** with both Pad 2 modules installed at once, only one app got installed. Android may ask
   you to allow each app's install but shows one such prompt at a time, so the second install waited

@@ -15,7 +15,7 @@ LOG_TAG=descfix
 # 4 = truncated map found but repaired map failed validation.
 transform() {
     "$BB" awk -v mode="$1" -v mac="$(echo "$KBD_MAC" | tr 'A-F' 'a-f')" \
-        -v vid="$KBD_VID" -v pid="$KBD_PID" -v tail="$DESC_TAIL" \
+        -v vid="$KBD_VID" -v pid="$KBD_PID" -v tail="$DESC_TAIL" -v oldtails="$DESC_OLD_TAILS" \
         -v trunc="$DESC_TRUNC_BYTES" -v full="$DESC_FULL_BYTES" -v swaps="$DESC_SWAPS" '
     function hx(s) { s = tolower(s); return (index("0123456789abcdef", substr(s,1,1)) - 1) * 16 + index("0123456789abcdef", substr(s,2,1)) - 1 }
     # Walks HID items: must end exactly on an item boundary with all collections closed.
@@ -52,18 +52,26 @@ transform() {
         }
         return h
     }
+    # A map this module wrote: the 512 cached bytes followed by the current or an older tail.
+    function ours_tail(d,   t, k, nt, ot) {
+        t = substr(d, trunc*2 + 1)
+        if (t == tail) return 1
+        nt = split(oldtails, ot, " ")
+        for (k = 1; k <= nt; k++) if (t == ot[k]) return 1
+        return 0
+    }
     function flush(   k, d, f) {
         for (k = 1; k <= cnt; k++) {
             if (ours && vok && pok && buf[k] ~ /^HogpDescriptor = /) {
                 d = substr(buf[k], 18)
-                if (mode == "fix" && (length(d) == trunc * 2 || (length(d) == full * 2 && substr(d, trunc*2 + 1) == tail))) {
+                if (mode == "fix" && (length(d) == trunc * 2 || (length(d) > trunc * 2 && ours_tail(d)))) {
                     f = swap_all(substr(d, 1, trunc * 2) tail, 1)
                     if (f != d) {
                         if (valid(f) && length(f) == full * 2) { buf[k] = "HogpDescriptor = " f; changed = 1 }
                         else bad = 1
                     }
                 }
-                if (mode == "restore" && length(d) == full * 2 && substr(d, trunc*2 + 1) == tail) {
+                if (mode == "restore" && length(d) > trunc * 2 && ours_tail(d)) {
                     buf[k] = "HogpDescriptor = " substr(swap_all(d, -1), 1, trunc * 2); changed = 1
                 }
             }

@@ -1,0 +1,28 @@
+# OnePlus Pad 2 Smart Keyboard, used over Bluetooth on a Linux PC.
+#
+# The touchpad: the HID report map declares Physical Max = Logical Max (2764 x 1630 in 0.01 inch),
+# so Linux sees a 691 x 407 mm touchpad and the pointer moves far too fast. The real pad is
+# about 120 x 71 mm, which is 23 units/mm on both axes (the same as the tablet's pogo touchpad).
+#
+# Install:
+#   sudo install -m 644 61-oneplus-pad-keyboard.hwdb /etc/udev/hwdb.d/
+#   sudo systemd-hwdb update
+# then disconnect and reconnect the keyboard.
+
+evdev:name:OnePlus Pad Smart Keyboard Touchpad:*
+ EVDEV_ABS_00=::23
+ EVDEV_ABS_01=::23
+ EVDEV_ABS_35=::23
+ EVDEV_ABS_36=::23
+
+# Keys whose codes don't match their labels. The scancode is the HID usage (page << 16 | usage).
+#   Esc        sends Consumer "AC Back" (0x0c0224), which Linux maps to Back
+#   Search     sends Keyboard F23        (0x070072)
+#   Microphone sends Keyboard F13        (0x070068), which GNOME treats as "open Settings"
+# The Lock key sends Keyboard F24 (0x070073) and is left as is: GNOME can't grab the
+# XF86ScreenSaver keysym that KEY_SCREENLOCK produces, so bind F24 to a lock shortcut instead:
+#   Settings > Keyboard > Custom Shortcuts, command "loginctl lock-session", key F24.
+evdev:input:b0005v22D9p3869*
+ KEYBOARD_KEY_c0224=esc
+ KEYBOARD_KEY_70072=search
+ KEYBOARD_KEY_70068=micmute

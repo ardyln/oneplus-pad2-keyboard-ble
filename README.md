@@ -82,6 +82,20 @@ The docs were written during development and refer to the original working folde
   (after the uevent listener has started, so attach/detach work even if that install fails).
 - After a long time on the pins, the first detach can take ~13 s: the keyboard's radio is slow to start advertising.
 - Attach/detach handling starts after the first unlock following a boot.
+- Pairing the keyboard with another device (e.g. a PC) makes it ignore the tablet while that device's
+  Bluetooth is on, even if the keyboard is blocked there. To get it back: **remove** the keyboard on
+  the other device (or turn its Bluetooth off), forget the keyboard on the tablet, turn the tablet's
+  Bluetooth off and on, then attach and detach the keyboard and accept the pairing notification.
+  Don't pair it from "Pair new device" in Settings: Android then tries classic Bluetooth, which the
+  keyboard doesn't have, and it never connects.
+
+## Linux PC
+The keyboard also works over Bluetooth on Linux without this module (Linux reads the whole report
+map). [`linux/61-oneplus-pad-keyboard.hwdb`](linux/61-oneplus-pad-keyboard.hwdb) fixes the touchpad
+speed and the Esc, Search and microphone keys; installing it is described in the file. The Lock key
+sends F24, which GNOME can't use as a lock key directly: add a custom shortcut for F24 that runs
+`loginctl lock-session`. Pairing with a PC takes the keyboard away from the tablet until you remove
+it on the PC again (see above).
 
 ## OnePlus Stylo 2
 

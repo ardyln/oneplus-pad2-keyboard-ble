@@ -1,7 +1,7 @@
 id=pad2_keyboard_ble
 name=OnePlus Pad 2 Keyboard BLE
-version=0.10
-versionCode=10
+version=0.11
+versionCode=11
 author=ardy
 description=Pad 2 port of the Pad 3 keyboard module by Drun555: Bluetooth fallback for the OnePlus Pad 2 Smart Keyboard when it is detached
 updateJson=https://raw.githubusercontent.com/ardyln/oneplus-pad2-keyboard-ble/main/update.json
