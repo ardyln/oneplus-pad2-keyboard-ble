@@ -21,13 +21,12 @@ evdev:name:OnePlus Pad Smart Keyboard Touchpad:*
 #   Esc        sends Consumer "AC Back" (0x0c0224), which Linux maps to Back
 #   Search     sends Keyboard F23        (0x070072)
 #   Microphone sends Keyboard F13        (0x070068), which GNOME treats as "open Settings"
-# The Lock key sends Keyboard F24 (0x070073). Newer systemd maps it to KEY_SCREENLOCK, but GNOME
-# here can't grab the XF86ScreenSaver keysym that produces, so it's kept as F24 (this file overrides
-# systemd's) and bound to a lock shortcut instead:
-#   Settings > Keyboard > Custom Shortcuts, command "loginctl lock-session", key F24.
+#   Lock       sends Keyboard F24        (0x070073). Mapped to KEY_SCREENSAVER, not KEY_SCREENLOCK:
+#              GNOME (mutter 51) files its lock shortcut (XF86ScreenSaver) only under KEY_SCREENSAVER,
+#              so KEY_SCREENLOCK does nothing there. See docs/KEYBOARDS.md.
 evdev:name:OnePlus Pad Smart Keyboard:*
 evdev:name:OnePlus Pad Smart Keyboard Consumer Control:*
  KEYBOARD_KEY_c0224=esc
  KEYBOARD_KEY_70072=search
  KEYBOARD_KEY_70068=micmute
- KEYBOARD_KEY_70073=f24
+ KEYBOARD_KEY_70073=screensaver

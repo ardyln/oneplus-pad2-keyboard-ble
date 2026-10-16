@@ -56,7 +56,7 @@ Tested over Bluetooth on Ubuntu 26.10 (GNOME, Wayland). Linux reads the whole HI
 | Esc | Consumer AC Back (0x0c0224) | Back, does nothing | `esc` |
 | Microphone | Keyboard F13 (0x070068) | GNOME opens Settings | `micmute` |
 | Search | Keyboard F23 (0x070072) | nothing | `search` |
-| Lock | Keyboard F24 (0x070073) | nothing | `screenlock` in the systemd proposal; kept as F24 in this repo's file, because GNOME on the test laptop doesn't grab the resulting XF86ScreenSaver (bind F24 to `loginctl lock-session` instead) |
+| Lock | Keyboard F24 (0x070073) | nothing | `screenlock` in the systemd proposal; `screensaver` in this repo's file, because GNOME doesn't react to `screenlock` (see below) |
 | Brightness down | Consumer brightness down **and** Keyboard F16 (0x07006b) | works (F16 is ignored) | none |
 | Brightness up, screenshot, media, volume, Delete | standard codes | work | none |
 | Touchpad toggle | handled inside the keyboard | works | none |
@@ -65,6 +65,18 @@ Tested over Bluetooth on Ubuntu 26.10 (GNOME, Wayland). Linux reads the whole HI
 so Linux sees a 691 × 407 mm pad and the pointer moves far too fast. The real pad is about 120 × 71 mm,
 which is 23 units/mm on both axes. That matches the device tree's `touchpad-xy-resolution = <23 23>`
 for `caihong`, and the 8,640 mm² touchpad area given in [reviews][gsmarena].
+
+**Lock key and GNOME:** GNOME's lock shortcut is the keysym XF86ScreenSaver. In the keymap (xkb-data 2.48,
+libxkbcommon 1.13) that keysym is on two keys: `KEY_SCREENLOCK` (Linux 152, xkb 160) and `KEY_SCREENSAVER`
+(Linux 581, xkb 589). On the test laptop (Ubuntu 26.10, GNOME/mutter 51), mutter registers the shortcut only
+under xkb 589: in Looking Glass, `global.display.get_keybinding_action(160, 0)` is 0 and `(589, 0)` is the
+shortcut's ID. So a key mapped to `screenlock`, the code systemd's existing lock-key entries use, reaches
+applications as XF86ScreenSaver but doesn't lock; mapped to `screensaver`, it locks (GNOME Shell reports
+`AcceleratorActivated` and calls `org.gnome.ScreenSaver.Lock`). Why mutter skips xkb 160 isn't pinned down
+yet; it looks like a mutter bug that would affect any keyboard with a standard lock key.
+
+Testing key codes by changing a running device's keymap (`EVIOCSKEYCODE`) doesn't work under GNOME: libinput
+drops codes the device didn't list when it appeared. Change the hwdb and reconnect instead.
 
 **Pairing with a PC** makes the keyboard ignore the tablet while the PC's Bluetooth is on, even if the
 keyboard is blocked there; the tablet's pairing is kept. See the README.
