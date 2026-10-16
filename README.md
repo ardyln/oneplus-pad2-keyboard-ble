@@ -96,6 +96,8 @@ speed and the Esc, Search and microphone keys; installing it is described in the
 sends F24, which GNOME can't use as a lock key directly: add a custom shortcut for F24 that runs
 `loginctl lock-session`. Pairing with a PC takes the keyboard away from the tablet until you remove
 it on the PC again (see above).
+[docs/KEYBOARDS.md](docs/KEYBOARDS.md) has the details: key codes, the touchpad, and how the keyboards of
+other OnePlus/OPPO tablets are named.
 
 ## OnePlus Stylo 2
 

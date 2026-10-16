@@ -9,8 +9,9 @@
 #   sudo systemd-hwdb update
 # then disconnect and reconnect the keyboard.
 
-# Matched by ID plus the absolute-axis capability (e0,1,3), which only the touchpad device has.
-evdev:input:b0005v22D9p3869*-e0,1,3,*
+# Matched by name: other OnePlus/OPPO keyboards share the 22d9:3869 ID but announce other names
+# (see docs/KEYBOARDS.md).
+evdev:name:OnePlus Pad Smart Keyboard Touchpad:*
  EVDEV_ABS_00=::23
  EVDEV_ABS_01=::23
  EVDEV_ABS_35=::23
@@ -24,7 +25,8 @@ evdev:input:b0005v22D9p3869*-e0,1,3,*
 # here can't grab the XF86ScreenSaver keysym that produces, so it's kept as F24 (this file overrides
 # systemd's) and bound to a lock shortcut instead:
 #   Settings > Keyboard > Custom Shortcuts, command "loginctl lock-session", key F24.
-evdev:input:b0005v22D9p3869*
+evdev:name:OnePlus Pad Smart Keyboard:*
+evdev:name:OnePlus Pad Smart Keyboard Consumer Control:*
  KEYBOARD_KEY_c0224=esc
  KEYBOARD_KEY_70072=search
  KEYBOARD_KEY_70068=micmute
