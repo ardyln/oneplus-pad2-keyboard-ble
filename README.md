@@ -17,7 +17,7 @@ as AI-generated too.
 ## What it does
 | Problem on AOSP | Fix |
 |---|---|
-| The keyboard's HID report map is 561 bytes; Android reads only 512 over GATT. The kernel rejects the truncated map (`item fetching failed at offset 511/512`), so **no keys work**, and Android 17 then marks the keyboard "unsupported" and forbids reconnecting | Appends the missing 49 bytes to the cached map (validated before writing), before Bluetooth starts or with one Bluetooth restart after a new bond |
+| The keyboard's HID report map is 563 bytes; Android reads only 512 over GATT. The kernel rejects the truncated map (`item fetching failed at offset 511/512`), so **no keys work**, and Android 17 then marks the keyboard "unsupported" and forbids reconnecting | Appends the missing 51 bytes, read from the keyboard itself on a Linux PC, to the cached map (validated before writing), before Bluetooth starts or with one Bluetooth restart after a new bond |
 | The firmware declares a 70 × 41 cm touchpad, so the BLE pointer moves ~6× too fast | Corrects the declared size to the real 120 × 71 mm (23 units/mm, same as the pogo touchpad) |
 | Double input while attached | On attach: HID policy *forbidden* + disconnect. On detach: *allowed* + connect |
 | Laggy touchpad | A small companion app requests the high-priority (~15 ms) BLE connection interval |

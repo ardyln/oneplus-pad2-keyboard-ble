@@ -102,6 +102,7 @@ The global `hidden_api_policy=1` exists so that these reflective calls aren't bl
 - **`apply`** keeps the first 1024 hex chars and appends a fixed 98-hex-char (49-byte) `TAIL`, giving 1122 hex chars (561 bytes). Its length no longer matches, so the fix doesn't loop. The tail continues a touchpad collection that is already in progress at byte 512: 29-byte report, five 5-byte contacts, 16-bit scan time, contact count, button, and the closing `c0`. The file is rewritten through a temp file `.bt_config.pogofix` with `cat > CFG`, then `chown bluetooth:bluetooth`, `chmod 0660` and `chcon bluetooth_data_file`.
 - **Runtime path.** For a new bond, `service.sh` detects the 512-byte map within 3 s and restarts Bluetooth so UHID re-creates the device with the 561-byte map.
 - **No backup** of `bt_config.conf` is made.
+- **On the Pad 2** the map is 563 bytes and its tail is 51 bytes, measured on Linux; this port uses that tail since v0.11 (see `docs/EXTRACTED.md`). The 561/49 figures above are the Pad 3 module's.
 
 ## 6. Every hardcoded device-specific value
 

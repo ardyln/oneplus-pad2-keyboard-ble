@@ -41,7 +41,7 @@ On the next boot `uninstall.sh` does the following:
 - **Status at any time:** the KernelSU **Action** button on the module, or `adb shell su -c 'sh /data/adb/modules/pad2_keyboard_ble/action.sh'`
 
 ## Known issues / design notes
-- The 49-byte report-map tail is inferred from the Pad 3 module, not read from this keyboard. It fits exactly (see `pad2_data/EXTRACTED.md`). If it's ever wrong, the kernel rejects the whole map, keys included. `descriptor-fix.sh` validates the joined map before writing.
+- The 51-byte report-map tail is the keyboard's own, read on a Linux PC (BlueZ reads the whole 563-byte map). Up to v0.10 the module appended a 49-byte tail inferred from the Pad 3 module, which also parsed but described the end of the touchpad report differently (see `docs/EXTRACTED.md`). A map ending in that old tail is upgraded at the next boot. `descriptor-fix.sh` validates the joined map before writing; if it were ever wrong, the kernel would reject the whole map, keys included.
 - Android 17 forbids the keyboard 10 s after a failed HID probe (`Disabling HID connection for unsupported device`). The module therefore repairs the map first and re-allows the policy on every detach.
 - Each new bond (first pairing, re-pair, Bluetooth reset) causes **one Bluetooth restart** about 3 s after bonding. Other Bluetooth devices drop briefly. There's a limit of 3 restarts per boot.
 - The global hidden-API exemption is **off** (`HIDDEN_API_POLICY=0`), and testing showed it isn't needed.
@@ -58,7 +58,7 @@ Logs: `pad2_data/phase5_tests/` (module log + filtered logcat, no keys).
 | # | Test | Result |
 |---|---|---|
 | 1 | Typing while attached, no double input | **Pass.** `hidctl suspend` → policy 0, BLE HID disconnected |
-| 2 | Detach → type over BLE | **Pass.** `resume` → policy 100, HID connected, kernel accepted the 561-byte map |
+| 2 | Detach → type over BLE | **Pass.** `resume` → policy 100, HID connected, kernel accepted the 561-byte map (the inferred Pad 3 tail used then) |
 | 3 | Touchpad while detached | v0.1: worked but ~6x too fast. **v0.2: pass**, 23 units/mm, latency helper `High-priority BLE interval accepted=true` |
 | 4 | Re-attach → clean switch back | **Pass.** No double input; latency helper stopped |
 | 5 | Detach again after a reboot | **Pass.** No Bluetooth restart needed (map already fixed at post-fs-data) |
@@ -68,6 +68,7 @@ Logs: `pad2_data/phase5_tests/` (module log + filtered logcat, no keys).
 | 9 | Real-detach regression (v0.7) | **Pass.** BLE input 0.2–0.8 s after the detach uevent; first detach after a long attach ~13 s (keyboard-side, see Known issues) |
 | 10 | Address detection (v0.8, 2026-10-15) | **Pass.** With the cache deleted, the address was read from the pogo frames and matched the paired keyboard; detach → BLE (`resume`, rc=0), attach → pogo (`suspend`, rc=0); a pinned address took precedence |
 | 11 | Remove and reinstall the module, reboot (v0.9, 2026-10-15) | **Pass.** v0.8 had hung on the app install (attach/detach stopped working). v0.9: the listener started first, the app installed at boot (`Success`), attach handled |
+| 12 | Real report-map tail (v0.11, 2026-10-16) | **Pass.** After a fresh bond the module restarted Bluetooth once and wrote the 563-byte map with the real 51-byte tail; the kernel accepted it and the keyboard, consumer and touchpad input devices appeared; detach → BLE reconnect worked |
 
 Iterations:
 - v0.1: the priv-app was never mounted (KernelSU without a metamodule).
