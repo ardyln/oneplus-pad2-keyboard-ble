@@ -81,9 +81,10 @@ The docs were written during development and refer to the original working folde
 - **Touchpad over Bluetooth** relies on the phone's Bluetooth stack enabling the touchpad's HID report.
   On the author's unit it works; on at least one other unit the **keys work over Bluetooth but the
   touchpad doesn't** (it still works **docked**). This is below the module — the keyboard never starts
-  sending the touchpad over Bluetooth there — and can't be fixed from a module or app. Details and the
-  full investigation: [`docs/BLE-TOUCHPAD.md`](docs/BLE-TOUCHPAD.md). Diagnose with
-  [`tools/bond-check.sh`](tools/bond-check.sh) and [`tools/touchpad-test.sh`](tools/touchpad-test.sh).
+  sending the touchpad over Bluetooth there. The module/app approaches tried so far are ruled out, but
+  the root cause isn't pinned and several leads are still open (help welcome — an HCI log of a fresh
+  pairing would settle it). Full investigation and open leads: [`docs/BLE-TOUCHPAD.md`](docs/BLE-TOUCHPAD.md).
+  Diagnose with [`tools/bond-check.sh`](tools/bond-check.sh) and [`tools/touchpad-test.sh`](tools/touchpad-test.sh).
 - KernelSU without a mounting metamodule doesn't overlay `system/`, so the companion app is installed as a normal app
   (after the uevent listener has started, so attach/detach work even if that install fails).
 - After a long time on the pins, the first detach can take ~13 s: the keyboard's radio is slow to start advertising.

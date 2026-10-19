@@ -5,8 +5,11 @@ over Bluetooth but the touchpad does not** (while docked on the pogo pins, the t
 This page records what that investigation found. The short version: on the reference unit the BLE
 touchpad works and everything the module does is correct; on the reporter's unit the keyboard simply
 never starts sending the touchpad over Bluetooth, for a reason that lives in the phone's Bluetooth
-stack (or the keyboard's firmware), **not** in this module — and that can't be fixed from a module or
-an app. Use the touchpad **docked** there.
+stack (or the keyboard's firmware), **not** in this module. The module- and app-level approaches tried
+so far are ruled out (below), **but the root cause isn't pinned yet** and several leads are still open
+— see [Open leads](#open-leads--help-wanted). If you hit this, the single most useful thing you can do
+is capture an HCI log of a fresh pairing (method at the end) and open an issue. Until it's solved, the
+touchpad works **docked**.
 
 ## How the BLE touchpad is supposed to work
 
@@ -78,19 +81,44 @@ whether `0x0034` is written — was not provided, and a keyboard swap wasn't pos
 explanation (the keyboard's report layout tripping AOSP's HID report handling) is **strongly indicated
 but not proven**.
 
-## Can it be fixed?
+## What's ruled out, and what isn't
 
-**Not from this module or any app, on any Android version.** The decision to enable (or skip) the
-touchpad's CCCD is made inside the phone's Bluetooth stack (`bta_hh_le` in `libbluetooth`), which a
-module can't touch cleanly or portably, and the HID GATT service is walled off from apps. The realistic
-options:
+The decision to enable (or skip) the touchpad's CCCD is made inside the phone's Bluetooth stack
+(`bta_hh_le` in `libbluetooth`), at bond time. That much is clear. What's been **tried and ruled out**:
 
-- **Use the touchpad docked (pogo).** Works regardless — it's a separate kernel driver, not HOGP.
-- **A different keyboard unit** (one without the extra report, like the reference unit) would likely
-  work, *if* the cause is the keyboard's report layout. A keyboard's firmware can't be changed on a
-  custom ROM.
-- **A fixed Bluetooth stack** — a ROM where it works, or a `bta_hh_le` fix from the ROM/AOSP
-  maintainers (the HCI capture above makes a precise bug report possible).
+- a module/descriptor change — the repair is already correct and identical to a working unit;
+- an app writing the CCCD or re-injecting touch via uinput — Android blocks third-party GATT access to
+  the HID service, so an app can't reach it (tested);
+- a GATT-cache clear or reconnect — the CCCDs persist with the bond, so these don't re-issue them;
+- "it's the Android version" — it fails on both Android 16 and 17.
+
+What's **not** settled: *why* the host skips the touchpad CCCD on the affected unit (the extra report
+tripping AOSP's report-array build is the leading guess, not a proven fact), and therefore whether a
+targeted fix exists. So this is open, not closed.
+
+## Open leads / help wanted
+
+In rough order of effort vs. payoff:
+
+1. **Capture a fresh-bond HCI log on the affected unit** (method below) and open an issue. This is the
+   decisive datum — it shows whether the touchpad CCCD `0x0034` is written at all, which separates
+   "CCCD skipped" from "report not routed to uhid", and whether the extra report shifts the discovery.
+   Nobody has run it yet on the affected unit; everything else is downstream of it.
+2. **Isolate keyboard vs. ROM.** Try a *different* Pad 2 keyboard on the affected ROM, or the affected
+   keyboard on a ROM where it's known to work. Works with a different keyboard → it's the keyboard's
+   report layout; works on a different ROM → it's that ROM's `bluedroid`.
+3. **If it's the report-array build:** read `bta_hh_le_process_cache_rpt` / `bta_hh_le_write_rpt_clt_cfg`
+   in that ROM's `libbluetooth` and check how the extra report perturbs the per-device report table
+   (it's built in cache order and the CCCD-write loop stops at the first unused slot). A one-line stack
+   fix may well exist — worth a patch or an upstream report.
+4. **ROM-side workarounds for a determined user:** a ROM where it works, a `bta_hh_le` patch, or (riskier,
+   build-specific) replacing `libbluetooth` via a module. None of these are this module's job, but
+   they're real paths, not dead ends.
+5. **Not yet explored:** whether the keyboard can be made to present the reference report layout, and
+   whether anything short of taking over the HCI transport can enable the CCCD from root. Both looked
+   hard in passing; neither was actually attempted.
+
+Meanwhile the touchpad works **docked (pogo)** — a separate kernel driver, unaffected by any of this.
 
 ## Diagnosing it on a device
 

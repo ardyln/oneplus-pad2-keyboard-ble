@@ -81,4 +81,4 @@ reconnect or a GATT-cache clear does **not** re-write them (they persist with th
 One user's keyboard exposed an **extra** report characteristic beyond this set (a feature report after
 the touchpad), and there the touchpad never streamed over Bluetooth while keys did — a keyboard-firmware
 difference that is the leading (unproven) suspect. See [`BLE-TOUCHPAD.md`](BLE-TOUCHPAD.md) for the full
-investigation; it isn't fixable from the module.
+investigation and the open leads — the module/app routes are ruled out, but the root cause is still open.
