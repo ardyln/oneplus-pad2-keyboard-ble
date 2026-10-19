@@ -59,3 +59,26 @@ Both versions parse cleanly and give the same 29-byte report, which is why the i
 The real one describes the button bit and the contact count range correctly. The module appends the
 real tail since v0.11 (`DESC_TAIL` in `module/config.sh`) and upgrades maps written with the old one
 (`DESC_OLD_TAILS`).
+
+## Update 2026-10-19: the HID GATT service, and the BLE touchpad
+The keyboard's GATT database was read from Android's cache (`/data/misc/bluetooth/gatt_cache_<mac>`,
+parsed with `oneplus-pad2-stylo2/tools/gatt_cache_dump.py`). The HID service (`0x1812`) exposes, on the
+reference unit, three notify **Report** characteristics (`0x2a4d`) plus one output report, each report
+input gated by its own CCCD (`0x2902`):
+
+| Report char value handle | Report Reference | CCCD | Report (ID) |
+|---|---|---|---|
+| `0x0027` | `0x0028` | `0x0029` | keyboard (ID 1) |
+| `0x002b` | `0x002c` | `0x002d` | consumer |
+| `0x002f` | `0x0030` | — | output (LEDs) |
+| `0x0032` | `0x0033` | `0x0034` | **touchpad (ID 3)** |
+
+Over Bluetooth the report map (what this module repairs) only defines the report *shapes*; the actual
+input is turned on when the **host writes `0100` to each report's CCCD at bond time**. Confirmed by HCI
+btsnoop: a fresh bond on the reference unit writes `0x0029`, `0x002d` and `0x0034` (all `0100`); a
+reconnect or a GATT-cache clear does **not** re-write them (they persist with the bond).
+
+One user's keyboard exposed an **extra** report characteristic beyond this set (a feature report after
+the touchpad), and there the touchpad never streamed over Bluetooth while keys did — a keyboard-firmware
+difference that is the leading (unproven) suspect. See [`BLE-TOUCHPAD.md`](BLE-TOUCHPAD.md) for the full
+investigation; it isn't fixable from the module.

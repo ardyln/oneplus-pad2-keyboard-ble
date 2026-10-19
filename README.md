@@ -70,14 +70,20 @@ Keep your keystore: later app updates must be signed with the same key.
 |---|---|
 | `module/` | Module scripts; all device values in `config.sh` (the keyboard's address is detected, see above) |
 | `PogoPair/`, `HidCtl/` | Companion app (pairing + latency) and the root `app_process` HID-policy helper |
-| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher) |
-| `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `pad2_vs_pad3.diff` |
+| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher); read-only on-device diagnostics `bond-check.sh` + `touchpad-test.sh` |
+| `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `KEYBOARDS.md` (OnePlus/OPPO keyboard names + Linux), `BLE-TOUCHPAD.md` (touchpad-over-Bluetooth investigation), `pad2_vs_pad3.diff` |
 | `release/` | The current build, also attached to the GitHub releases |
 
 The docs were written during development and refer to the original working folders: `pad2_module/` →
 `module/`, `pad2_src/` → `PogoPair/` + `HidCtl/`, `pad2_data/` (raw collection, not published).
 
 ## Known limitations
+- **Touchpad over Bluetooth** relies on the phone's Bluetooth stack enabling the touchpad's HID report.
+  On the author's unit it works; on at least one other unit the **keys work over Bluetooth but the
+  touchpad doesn't** (it still works **docked**). This is below the module — the keyboard never starts
+  sending the touchpad over Bluetooth there — and can't be fixed from a module or app. Details and the
+  full investigation: [`docs/BLE-TOUCHPAD.md`](docs/BLE-TOUCHPAD.md). Diagnose with
+  [`tools/bond-check.sh`](tools/bond-check.sh) and [`tools/touchpad-test.sh`](tools/touchpad-test.sh).
 - KernelSU without a mounting metamodule doesn't overlay `system/`, so the companion app is installed as a normal app
   (after the uevent listener has started, so attach/detach work even if that install fails).
 - After a long time on the pins, the first detach can take ~13 s: the keyboard's radio is slow to start advertising.
