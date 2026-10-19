@@ -11,8 +11,7 @@ as AI-generated too.
 
 > **Status:** works on the author's tablet. Use at your own risk. The module edits
 > `/data/misc/bluedroid/bt_config.conf` (with a backup, and undone on uninstall).
-> Upstream has no license file, and its author has been contacted about this port; until that's
-> settled this repo doesn't add a license of its own.
+> Upstream has no license file, and this repository is published with permission from the author without incorporating a license.
 
 ## What it does
 | Problem on AOSP | Fix |
