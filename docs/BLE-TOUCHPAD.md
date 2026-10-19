@@ -100,8 +100,8 @@ targeted fix exists. So this is open, not closed.
 
 In rough order of effort vs. payoff:
 
-1. **Capture a fresh-bond HCI log on the affected unit** (method below) and open an issue. This is the
-   decisive datum — it shows whether the touchpad CCCD `0x0034` is written at all, which separates
+1. **Capture a fresh-bond HCI log on the affected unit** — run [`tools/ble-touchpad-trace.sh`](../tools/ble-touchpad-trace.sh)
+   (it gives the verdict on-device and saves the log) and open an issue. This is the decisive datum — it shows whether the touchpad CCCD `0x0034` is written at all, which separates
    "CCCD skipped" from "report not routed to uhid", and whether the extra report shifts the discovery.
    Nobody has run it yet on the affected unit; everything else is downstream of it.
 2. **Isolate keyboard vs. ROM.** Try a *different* Pad 2 keyboard on the affected ROM, or the affected
@@ -128,6 +128,8 @@ Two read-only scripts in [`tools/`](../tools):
   ("pair with null") state and the classic/DUAL "Pair new device" trap.
 - **`touchpad-test.sh`** — with the keyboard **detached** (on Bluetooth), finds the touchpad input
   node, runs a timed window, and counts the touch events while you swipe.
+- **`ble-touchpad-trace.sh`** — captures an HCI log across a fresh pairing and reports, on-device,
+  whether the touchpad's CCCD is enabled at bond (the decisive test; see below).
 
 Read `touchpad-test.sh`'s output like this:
 
@@ -140,20 +142,43 @@ Read `touchpad-test.sh`'s output like this:
 
 ### Capturing the proof (for a bug report)
 
-The report CCCDs are only written at a *fresh bond*, and the btsnoop log rotates under load, so:
+Use [`tools/ble-touchpad-trace.sh`](../tools/ble-touchpad-trace.sh). It arms a clean capture, tells you
+exactly what to tap, then checks the result **on the device** (no PC needed) and saves the logs. Push
+it to the tablet and run its three steps in a **root** shell:
 
 ```
-# 1. arm (root)
-setprop persist.bluetooth.btsnooplogmode full
-cmd bluetooth_manager disable; cmd bluetooth_manager wait-for-state:STATE_OFF
-rm -f /data/misc/bluetooth/logs/btsnoop_hci.log*
-cmd bluetooth_manager enable; cmd bluetooth_manager wait-for-state:STATE_ON
-# 2. forget the keyboard, attach+detach, accept the pairing prompt, press a key or two, then stop
-# 3. grab BOTH logs (the pairing may be in .last after rotation)
-cat /data/misc/bluetooth/logs/btsnoop_hci.log.last 2>/dev/null | gzip -c | base64   # and btsnoop_hci.log
-# 4. off
-setprop persist.bluetooth.btsnooplogmode disabled; cmd bluetooth_manager disable; cmd bluetooth_manager enable
+# step 1 -- start a clean capture; it prints the on-screen steps
+sh ble-touchpad-trace.sh arm
+
+#   now on the tablet SCREEN (no terminal output): Settings -> forget the keyboard ->
+#   attach + detach it -> accept the pairing prompt -> press one or two keys, then stop.
+
+sh ble-touchpad-trace.sh grab     # step 2 -- check + save
+sh ble-touchpad-trace.sh off      # step 3 -- stop capturing
 ```
 
-Decode on a PC with `btmon -r <file>` and look for `ATT: Write Request` to the report CCCDs
-(`0x0029`, `0x002d`, `0x0034`) with value `0100`. A missing `0x0034` is the smoking gun.
+`grab` prints whether each keyboard report CCCD was enabled at bond, and the verdict:
+
+- **touchpad `0x0034` = NO** while keys `0x0029` / consumer `0x002d` = yes → the stack skips the
+  touchpad's notification at bond. **That's the bug.**
+- **touchpad `0x0034` = yes** → the keyboard is told to send the touchpad; if it still doesn't work,
+  the fault is downstream (report not routed to the input device).
+- **all three = NO** → the capture missed the pairing (typed too much, or the bond didn't happen) —
+  just run `arm` → re-pair → `grab` again.
+
+It also saves `btsnoop_hci.log(.last).gz.b64` to `/sdcard` — attach those to the bug report.
+
+**Why three steps:** the report CCCDs are written only at a **fresh bond** (a reconnect or cache clear
+doesn't re-issue them), and the btsnoop log **rotates** under load so the pairing often lands in
+`…log.last`; the script handles both.
+
+**To analyse the saved log by hand** (on a PC with BlueZ) — the on-device check is a byte-level
+heuristic, this is the authoritative view:
+
+```
+base64 -d btsnoop_hci.log.last.gz.b64 | gunzip > bond.btsnoop
+btmon -r bond.btsnoop | grep -A3 'ATT: Write Request'
+```
+
+Look for writes to the report CCCDs (`0x0029`, `0x002d`, `0x0034`) with value `0100`; a missing
+`0x0034` is the smoking gun.

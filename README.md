@@ -70,7 +70,7 @@ Keep your keystore: later app updates must be signed with the same key.
 |---|---|
 | `module/` | Module scripts; all device values in `config.sh` (the keyboard's address is detected, see above) |
 | `PogoPair/`, `HidCtl/` | Companion app (pairing + latency) and the root `app_process` HID-policy helper |
-| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher); read-only on-device diagnostics `bond-check.sh` + `touchpad-test.sh` |
+| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher); on-device diagnostics `bond-check.sh`, `touchpad-test.sh` (read-only) and `ble-touchpad-trace.sh` (HCI capture for a bug report) |
 | `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `KEYBOARDS.md` (OnePlus/OPPO keyboard names + Linux), `BLE-TOUCHPAD.md` (touchpad-over-Bluetooth investigation), `pad2_vs_pad3.diff` |
 | `release/` | The current build, also attached to the GitHub releases |
 
