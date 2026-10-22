@@ -12,6 +12,14 @@ if [ -d /data/adb/modules/oneplus_pogo_keyboard_ble ] && [ ! -f /data/adb/module
     ui_print "!          Remove it before rebooting so the two do not fight over Bluetooth."
 fi
 
+for d in /system_ext /product /system /vendor /odm; do
+    if [ -f "$d/etc/default-permissions/default-permissions_org.lineageos.keyboard.xml" ]; then
+        ui_print "- This ROM handles the keyboard over Bluetooth itself (OplusKeyboard):"
+        ui_print "  the module will only keep the Bluetooth link fast for the touchpad."
+        break
+    fi
+done
+
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 for f in post-fs-data.sh service.sh uninstall.sh action.sh switch-mode.sh \
          uevent-handler.sh descriptor-fix.sh config.sh common.sh; do

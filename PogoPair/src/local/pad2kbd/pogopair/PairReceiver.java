@@ -9,7 +9,8 @@ import android.util.Log;
 import java.lang.reflect.Method;
 
 /**
- * Bonds with the keyboard, or starts the latency helper when already bonded.
+ * Bonds with the keyboard, or starts the latency helper when already bonded
+ * (with "pair" = false: only starts the latency helper).
  * Not exported: only root/system (the module scripts) can send it the PAIR broadcast.
  * The MAC comes from the "mac" extra; nothing is hardcoded.
  */
@@ -30,6 +31,13 @@ public final class PairReceiver extends BroadcastReceiver {
             }
             BluetoothDevice device = adapter.getRemoteDevice(mac);
             int state = device.getBondState();
+            // pair=false: the ROM pairs the keyboard itself; only start the latency helper,
+            // which waits for the bond if the ROM is still pairing.
+            if (!intent.getBooleanExtra("pair", true)) {
+                Log.i(TAG, "Latency only (ROM handles pairing), bond state " + state + ": " + mac);
+                context.startService(new Intent(context, LatencyService.class).putExtra("mac", mac));
+                return;
+            }
             if (state == BluetoothDevice.BOND_BONDED) {
                 Log.i(TAG, "Keyboard already bonded: " + mac);
                 context.startService(new Intent(context, LatencyService.class).putExtra("mac", mac));

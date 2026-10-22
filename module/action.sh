@@ -22,12 +22,19 @@ fi
 echo "Keyboard: $KBD_MAC ($SRCTXT)  pogo: $NOW"
 echo "Another keyboard is picked up when it's attached. To pin one: echo AA:BB:CC:DD:EE:FF > $MAC_OVERRIDE_FILE"
 SRC=action sh "$MODDIR/switch-mode.sh" "$NOW" force
-sh "$MODDIR/descriptor-fix.sh" check
-case $? in
-    0) echo "Report map: truncated (will be repaired on next Bluetooth restart/reboot)" ;;
-    1) echo "Report map: OK or keyboard not bonded" ;;
-    4) echo "Report map: truncated and repair INVALID - see log" ;;
-esac
+if rom_native; then
+    echo "Mode: ROM handles the keyboard ($ROM_KBD_PKG); the module only keeps the Bluetooth link fast"
+    if rom_touchpad_resolution; then echo "Touchpad resolution: set by the ROM"
+    else echo "Touchpad resolution: NOT set by the ROM (BLE pointer may be ~6x too fast)"; fi
+else
+    echo "Mode: full (pairing, HID switching, report map repair, latency)"
+    sh "$MODDIR/descriptor-fix.sh" check
+    case $? in
+        0) echo "Report map: truncated (will be repaired on next Bluetooth restart/reboot)" ;;
+        1) echo "Report map: OK or keyboard not bonded" ;;
+        4) echo "Report map: truncated and repair INVALID - see log" ;;
+    esac
+fi
 CLASSPATH="$MODDIR/hidctl.jar" app_process /system/bin local.pad2kbd.pogopair.HidCtl status "$KBD_MAC" 2>&1
 echo "Log: $LOG_FILE"
 tail -n 8 "$LOG_FILE" 2>/dev/null

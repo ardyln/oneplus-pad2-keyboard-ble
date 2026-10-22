@@ -7,9 +7,6 @@ LOG_TAG=service
 until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
 until [ "$(getprop sys.user.0.ce_available)" = "true" ]; do sleep 2; done
 
-# Lets the latency helper start from a background broadcast. Undone by uninstall.sh.
-cmd deviceidle whitelist +"$APP_PKG" >/dev/null 2>&1
-
 if [ "$HIDDEN_API_POLICY" = "1" ]; then
     if [ ! -f "$STATE_DIR/hidden_api_policy.orig" ]; then
         for k in hidden_api_policy hidden_api_policy_p_apps hidden_api_policy_pre_p_apps; do
@@ -47,6 +44,10 @@ if ! pm path "$APP_PKG" 2>/dev/null | grep -q "^package:/system"; then
     app_current "$APP_PKG" "$want" && touch "$STATE_DIR/app_user_installed"
 fi
 
+# Lets the latency helper start from a background broadcast. Undone by uninstall.sh.
+# Only works once the app is installed, so this comes after the install above.
+cmd deviceidle whitelist +"$APP_PKG" >/dev/null 2>&1
+
 # Poll loop: fallback attach/detach detection, plus repair of the report map after a new bond.
 # A new bond stores the 512-byte map; repairing needs the stack stopped, so Bluetooth is
 # restarted once, then the detached path re-allows HID (the stack forbids it after a failed probe).
@@ -60,6 +61,8 @@ while true; do
         LAST=$NOW
     fi
 
+    # The ROM reads the whole map itself; never restart Bluetooth or edit its bond
+    if rom_native; then sleep "$POLL_SECONDS"; continue; fi
     sh "$MODDIR/descriptor-fix.sh" check
     if [ $? -eq 0 ]; then
         n=$(cat "$STATE_DIR/bt_restarts" 2>/dev/null || echo 0)

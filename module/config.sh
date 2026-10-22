@@ -26,6 +26,15 @@ DESC_OLD_TAILS=0c66011047ffff000027ffff00007510950109568102095425057508950181020
 # Set to empty to disable.
 DESC_SWAPS="46cc0a:46d901 465e06:461701"
 
+# --- ROMs that handle the keyboard themselves ---
+# Some caihong ROMs ship OplusKeyboard (org.lineageos.keyboard, from hardware/oplus): it pairs the
+# keyboard on detach and switches HID between pogo and Bluetooth by itself, the Bluetooth stack reads
+# the whole 563-byte map, and the IDC file fixes the touchpad resolution. Then the module only keeps
+# the Bluetooth link fast and leaves pairing, HID policy and the report map alone.
+# auto = detect (the app's default-permissions file), yes/no = force. docs/ROM-NATIVE.md explains why.
+ROM_KBD_PKG=org.lineageos.keyboard
+ROM_NATIVE=auto
+
 # --- attach/detach detection ---
 UEVENT_DEVNAME=pogo_keyboard     # uevent DEVNAME of the pogo driver
 UEVENT_STATUS_VAR=pogopin_status # 1 = attached, 0 = detached

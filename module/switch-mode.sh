@@ -2,6 +2,7 @@
 # switch-mode.sh attached|detached [force]
 # attached: stop the latency client, forbid BLE HID and disconnect it (no double input).
 # detached: allow BLE HID, connect, and bond (first time) or start the latency client.
+# On a ROM that handles the keyboard itself (rom_native), only the latency client is touched.
 
 MODDIR=${0%/*}
 LOG_TAG=switch
@@ -41,6 +42,22 @@ if [ "$MODE" = attached ] && [ "$KBD_MAC_SOURCE" != config ] && [ "$KBD_MAC_SOUR
 fi
 if [ -z "$KBD_MAC" ]; then
     log "keyboard address unknown: attach the keyboard once, or write it to $MAC_OVERRIDE_FILE"
+    exit 0
+fi
+
+# The ROM's own app pairs and switches HID; only the latency client is started and stopped here.
+if rom_native; then
+    case "$MODE" in
+        attached)
+            log "pogo attached (${SRC:-?}) -> stop latency client (ROM handles HID)"
+            am stopservice --user 0 -n "$APP_PKG/.LatencyService" >/dev/null 2>&1
+            ;;
+        detached)
+            log "pogo detached (${SRC:-?}) -> start latency client for $KBD_MAC (ROM handles HID)"
+            am broadcast --user 0 -a "$APP_PKG.PAIR" -n "$APP_PKG/.PairReceiver" \
+                --es mac "$KBD_MAC" --ez pair false >/dev/null 2>&1
+            ;;
+    esac
     exit 0
 fi
 

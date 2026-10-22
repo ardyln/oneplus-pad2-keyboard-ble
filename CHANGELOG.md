@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12
+- **ROMs that handle the keyboard themselves:** if the ROM ships `OplusKeyboard`
+  (`org.lineageos.keyboard`, e.g. inferno0230's PixelOS 17 builds from 2026-10-22), the module
+  only keeps the Bluetooth link fast. It no longer edits the report map (at boot or at uninstall),
+  restarts Bluetooth, pairs the keyboard or switches the HID policy there; the ROM does that.
+  `ROM_NATIVE` in `config.sh` can force either mode. The Action button shows the mode, and whether
+  the ROM sets the touchpad resolution. Details: `docs/ROM-NATIVE.md`.
+- The latency helper now only requests the high-priority interval when the link is slower than
+  15 ms, so it no longer slows down a link that already runs at the keyboard's own 7.5 ms (Android
+  sets that after a fresh pairing).
+- **Fix:** on a fresh install, Android blocked the latency helper from starting in the background
+  until the next reboot. The module whitelisted the app before installing it.
+- New: `tools/btsnoop_kbd.py`, which reads an HCI snoop log: connection-interval timeline, how the
+  touchpad's reports arrive, and attribute reads (report map, preferred parameters).
+
 ## 0.11
 - **Fix:** the last 51 bytes of the keyboard's HID report map (the end of the touchpad description)
   are now the real ones, read from the keyboard over Bluetooth on a Linux PC. Earlier versions used

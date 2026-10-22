@@ -19,7 +19,15 @@ as AI-generated too.
 | The keyboard's HID report map is 563 bytes; Android reads only 512 over GATT. The kernel rejects the truncated map (`item fetching failed at offset 511/512`), so **no keys work**, and Android 17 then marks the keyboard "unsupported" and forbids reconnecting | Appends the missing 51 bytes, read from the keyboard itself on a Linux PC, to the cached map (validated before writing), before Bluetooth starts or with one Bluetooth restart after a new bond |
 | The firmware declares a 70 × 41 cm touchpad, so the BLE pointer moves ~6× too fast | Corrects the declared size to the real 120 × 71 mm (23 units/mm, same as the pogo touchpad) |
 | Double input while attached | On attach: HID policy *forbidden* + disconnect. On detach: *allowed* + connect |
-| Laggy touchpad | A small companion app requests the high-priority (~15 ms) BLE connection interval |
+| Laggy touchpad | A small companion app requests Android's high-priority BLE interval (11.25–15 ms) whenever the link is slower than that |
+
+**ROMs that handle the keyboard themselves.** Some caihong ROMs now ship `OplusKeyboard`
+(`org.lineageos.keyboard`, first in inferno0230's PixelOS 17 builds of 2026-10-22): it pairs the
+keyboard and switches between pogo and Bluetooth by itself, and on those builds the whole report map
+is read and (from build `20261022-1226`) the touchpad speed is right. On such a ROM the module only
+keeps the Bluetooth link fast. Android drops it to 45 ms after every reboot until the keyboard is
+paired again, and the module lifts it to 15 ms. It leaves the report map, pairing and HID policy to
+the ROM. Measurements and build details: [`docs/ROM-NATIVE.md`](docs/ROM-NATIVE.md).
 
 Attach/detach is detected from the pogo driver's uevent (`pogo_keyboard`, `pogopin_status`), with a
 `dumpsys input` poll as a fallback.
@@ -69,8 +77,8 @@ Keep your keystore: later app updates must be signed with the same key.
 |---|---|
 | `module/` | Module scripts; all device values in `config.sh` (the keyboard's address is detected, see above) |
 | `PogoPair/`, `HidCtl/` | Companion app (pairing + latency) and the root `app_process` HID-policy helper |
-| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher); on-device diagnostics `bond-check.sh`, `touchpad-test.sh` (read-only) and `ble-touchpad-trace.sh` (HCI capture for a bug report) |
-| `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `KEYBOARDS.md` (OnePlus/OPPO keyboard names + Linux), `BLE-TOUCHPAD.md` (touchpad-over-Bluetooth investigation), `pad2_vs_pad3.diff` |
+| `tools/` | `build.sh`, `hid_parse.py` (HID descriptor walker), `policy_watch.sh` (debug watcher); on-device diagnostics `bond-check.sh`, `touchpad-test.sh` (read-only) and `ble-touchpad-trace.sh` (HCI capture for a bug report); `btsnoop_kbd.py` (connection interval, touchpad delivery and attribute reads from an HCI snoop log) |
+| `docs/` | `ANALYSIS.md` (how the Pad 3 module works), `COMPARISON.md` (Pad 3 vs Pad 2), `EXTRACTED.md` (collected Pad 2 values + experiments), `NOTES.md` (install/recovery/tests), `KEYBOARDS.md` (OnePlus/OPPO keyboard names + Linux), `BLE-TOUCHPAD.md` (touchpad-over-Bluetooth investigation), `ROM-NATIVE.md` (ROMs with their own keyboard support; latency-only mode), `pad2_vs_pad3.diff` |
 | `release/` | The current build, also attached to the GitHub releases |
 
 The docs were written during development and refer to the original working folders: `pad2_module/` →

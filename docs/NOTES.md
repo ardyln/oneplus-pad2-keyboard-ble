@@ -70,6 +70,8 @@ Logs: `pad2_data/phase5_tests/` (module log + filtered logcat, no keys).
 | 10 | Address detection (v0.8, 2026-10-15) | **Pass.** With the cache deleted, the address was read from the pogo frames and matched the paired keyboard; detach → BLE (`resume`, rc=0), attach → pogo (`suspend`, rc=0); a pinned address took precedence |
 | 11 | Remove and reinstall the module, reboot (v0.9, 2026-10-15) | **Pass.** v0.8 had hung on the app install (attach/detach stopped working). v0.9: the listener started first, the app installed at boot (`Success`), attach handled |
 | 12 | Real report-map tail (v0.11, 2026-10-16) | **Pass.** After a fresh bond the module restarted Bluetooth once and wrote the 563-byte map with the real 51-byte tail; the kernel accepted it and the keyboard, consumer and touchpad input devices appeared; detach → BLE reconnect worked |
+| 13 | ROM-native mode (v0.12, 2026-10-22, PixelOS 17 build `20261022-1226`, `docs/ROM-NATIVE.md`) | **Pass.** Detected at install and at boot (`latency only; touchpad resolution set by the ROM`); report map, pairing and HID policy left to the ROM; after a reboot the first detach moved the link from 45 ms to 15 ms by itself (17:13) |
+| 14 | Fresh pairing with the module running (v0.12, same build) | **Pass.** Forget → attach → detach: the helper started while the ROM was still pairing (bond state 11), waited for the bond, saw Android switch to the keyboard's 7.5 ms and left it alone (`not requesting high priority`); touchpad reports every 7.6 ms |
 
 Iterations:
 - v0.1: the priv-app was never mounted (KernelSU without a metamodule).

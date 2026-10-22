@@ -8,7 +8,13 @@ LOG_TAG=uninstall
 . "$MODDIR/common.sh"
 
 log "uninstalling"
-sh "$MODDIR/descriptor-fix.sh" restore
+# On a ROM that reads the whole map itself, the stored map is the ROM's, even though it ends with
+# the same bytes this module appends; cutting it back to 512 bytes would break the keyboard.
+if rom_native; then
+    log "ROM handles the keyboard: report map left as the ROM stored it"
+else
+    sh "$MODDIR/descriptor-fix.sh" restore
+fi
 
 # The module directory is deleted right after this script returns, so the late cleanup
 # runs from a copy of what it needs.

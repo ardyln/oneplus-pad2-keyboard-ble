@@ -108,6 +108,26 @@ app_current() {
     [ -n "$_p" ] && [ "$(sha256sum "$_p" 2>/dev/null | cut -d' ' -f1)" = "$2" ]
 }
 
+# True when the ROM handles the keyboard over Bluetooth itself (see config.sh). Uses the app's
+# default-permissions file, so it also works in post-fs-data, before the package manager runs.
+rom_native() {
+    case "$ROM_NATIVE" in
+        yes) return 0 ;;
+        no) return 1 ;;
+    esac
+    for _d in /system_ext /product /system /vendor /odm; do
+        [ -f "$_d/etc/default-permissions/default-permissions_$ROM_KBD_PKG.xml" ] && return 0
+    done
+    return 1
+}
+
+# True when the IDC file sets the touchpad resolution (ROM-side fix for the 4 units/mm map).
+rom_touchpad_resolution() {
+    _idc=$(printf 'Vendor_%04x_Product_%04x.idc' "$KBD_VID" "$KBD_PID")
+    grep -qs '^[[:space:]]*touchpad\.resolution\.x' "/odm/usr/idc/$_idc" "/vendor/usr/idc/$_idc" \
+        "/system/usr/idc/$_idc"
+}
+
 # 0 = attached, 1 = detached, 2 = unknown (input service unavailable, e.g. during shutdown)
 pogo_state() {
     _in=$(dumpsys input 2>/dev/null)
