@@ -67,8 +67,28 @@ reading all of it (HCI snoop, `tools/btsnoop_kbd.py LOG <address prefix> read 0x
 ```
 
 The map stored in `bt_config.conf` afterwards is these 563 bytes, byte for byte. So the module's
-map repair isn't needed on this ROM. This snoop doesn't show whether the full read comes from the
-ROM's Bluetooth stack or from AOSP itself.
+map repair isn't needed on this ROM.
+
+**Where it comes from: a ROM patch, in AOSP's interop style.** Stock Android 17 can't read this
+map: `GATT_MAX_ATTR_LEN` is 512 (the GATT spec's limit), and `gatt_process_read_rsp`
+(`system/stack/gatt/gatt_cl.cc`) clips the first 516-byte response to 512 and then ends the read,
+because a clipped response no longer counts as "full". So it never sends a Read Blob at offset 512.
+That's the same in PixelOS's public Bluetooth repo (`PixelOS-AOSP/android_packages_modules_Bluetooth`,
+branch `seventeen`). The ROM's stack (`com.android.bt` 370399999, the factory APEX built with the
+ROM, not a Play update) has a new entry in `/apex/com.android.bt/etc/bluetooth/interop_database.conf`,
+and the name is compiled into its `libbluetooth_jni.so`:
+```
+# Some HOGP devices have the report map longer than the maximum GATT attribute value length (512
+# bytes), but serve the rest of it with Read Blob Requests past that length.
+[INTEROP_HOGP_READ_LONG_REPORT_MAP]
+# 0x22d9-0x3869 - OnePlus Pad 2/Pad 3 Smart Keyboard
+0x22d9-0x3869 = Vndr_Prdt_Based
+```
+The patch isn't in any public repo yet (checked 2026-10-22). AOSP already has a related interop,
+`INTEROP_HOGP_LONG_REPORT` ([change 3299536](https://android-review.googlesource.com/c/platform/packages/modules/Bluetooth/+/3299536),
+2024): for one listed keyboard (Brydge, `0x03f6-0xa001`) it appends the bytes after 512 from a
+table in the stack, much like this module does. The ROM's entry reads them from the keyboard
+instead, which also covers keyboards with different firmware.
 
 The two connections just before this pairing (15:41:59 and 15:42:25) used the old pairing and were
 dropped by the tablet (reason 0x16) about 11-14 s after connecting. The module's uninstall at 15:40
@@ -92,8 +112,11 @@ of 0.01 inch). The real pad is about 120 × 71 mm. So the kernel reports **4 uni
   ```
   and the ROM's `libinputflinger.so` reads those keys (the strings are in the library) and hands 23
   to the touchpad gesture code. The pointer moves at normal speed. AOSP itself has no such keys: its
-  `HardwareProperties.cpp` (main, checked 2026-10-22) takes the resolution only from the kernel, and
-  `gestureProp.*` IDC entries can't set it. So this is a ROM patch.
+  `HardwareProperties.cpp` takes the resolution only from the kernel (`absinfo.resolution`), and
+  `gestureProp.*` IDC entries can't set it. That's also true of PixelOS's public `frameworks/native`
+  (branch `seventeen`), and the public device tree's IDC file is still the one-line version. So
+  this is a local ROM patch (not published as of 2026-10-22). Nothing similar exists in AOSP or
+  LineageOS code review either.
 
 Note: `dumpsys input` still prints `resolution=4` under "Axis info" on build 2. That line is the
 kernel's value, not what the gesture code uses, so it can't tell whether the fix is active. The
@@ -144,7 +167,8 @@ request) and got it. That didn't happen again in any later connection, so it can
 
 ### Why: this is AOSP's own behaviour
 
-In AOSP's HID-over-GATT host (`system/bta/hh/bta_hh_le.cc`, main, checked 2026-10-22), the
+In AOSP's HID-over-GATT host (`system/bta/hh/bta_hh_le.cc`; same in AOSP main and in PixelOS 17,
+`PixelOS-AOSP/android_packages_modules_Bluetooth` branch `seventeen`, checked 2026-10-22), the
 keyboard's preferred parameters are read in exactly one place: `bta_hh_le_srvc_search_cmpl`, at the
 end of a service discovery, which calls `read_pref_conn_params_cb`. That callback raises a maximum
 below 11.25 ms to 11.25 ms (`L2CA_AdjustConnectionIntervals`, `BTM_BLE_CONN_INT_MIN_LIMIT` = 9),
@@ -213,14 +237,43 @@ its whitelist entry and the module's state, and didn't touch the HID policy.
 
 ## Open leads
 
-- **Fix the reboot loss in AOSP.** `bta_hh_security_cmpl` could still read the GAP preferred
-  parameters when it uses the cached reports (one characteristic read), or the parameters could be
-  saved with the pairing like the reports are. Either would give every HOGP device its preferred
-  interval after a reboot, with no module. The analysis above is the basis for a bug report.
-- **`OplusKeyboard` could do what `HidCtl tune` does.** It's built with `certificate: "platform"`
+- **Fix the reboot loss in AOSP.** On a cached reconnect, `bta_hh_security_cmpl`
+  (`system/bta/hh/bta_hh_le.cc`) skips discovery, so `read_pref_conn_params_cb` never runs. It
+  doesn't need the GATT database to get the value: the same ATT Read By Type for UUID `0x2a04` that
+  pairing uses (15:42:50 in the build 1 snoop) works on any connection. An untested sketch, against
+  PixelOS 17 (`seventeen`):
+  ```diff
+  +static void read_pref_conn_params_cb(tCONN_ID conn_id, tGATT_STATUS status, uint16_t handle,
+  +                                     uint16_t len, uint8_t* value, void* data);
+  ...
+       /*  discovery has been done for HID service */
+       if (p_cb->app_id != 0 && p_cb->hid_srvc.state >= BTA_HH_SERVICE_DISCOVERED) {
+         log::verbose("discovery has been done for HID service");
+  +      /* The preferred connection parameters are read during service discovery, which a cached
+  +       * reconnect skips, and kept only in memory: read them again so they survive a reboot. */
+  +      BTA_GATTC_ReadUsingCharUuid(p_cb->conn_id, Uuid::From16Bit(GATT_UUID_GAP_PREF_CONN_PARAM),
+  +                                  0x0001, 0xFFFF, GATT_AUTH_REQ_NONE, read_pref_conn_params_cb,
+  +                                  p_cb);
+         /* configure protocol mode */
+  ```
+  `BTA_GATTC_ReadUsingCharUuid` takes a `GATT_READ_OP_CB`, the same type as
+  `read_pref_conn_params_cb`. This would give every HOGP device its preferred interval after a
+  reboot, with no module, and make `HidCtl tune` unnecessary. The other option is saving the
+  parameters with the pairing, like the cached reports.
+- **Or `OplusKeyboard` could do what `HidCtl tune` does.** It's built with `certificate: "platform"`
   and `platform_apis: true` (its `Android.bp`), so it can call `requestLeConnectionUpdate`
-  directly: after connecting on detach, read GAP `0x2a04` and request those parameters. That would
-  cover this ROM without the module.
+  directly: after connecting on detach, read GAP `0x2a04` and request those parameters. That fixes
+  only this keyboard, where the stack fix fixes every HOGP device.
+- **The touchpad resolution could be fixed in the map instead.** The ROM's stack already treats this
+  keyboard specially when it reads the map. Correcting the 10 Physical Maximum items there (what
+  this module's `DESC_SWAPS` do: 2764 × 1630 → 473 × 279, in 0.01 inch) would give the kernel the
+  right 23 units/mm. Every reader of the input device would then see the real size (`getevent`,
+  `dumpsys`), without a `frameworks/native` patch. Whether a stack-side descriptor edit or an IDC
+  property fits better is the maintainer's call; the Linux convention for a wrong HID descriptor is
+  a kernel fixup (`report_fixup` or HID-BPF), and for a wrong size from userspace, a hwdb entry.
+- **The Pad 3 keyboard** shares 22D9:3869 (the ROM's interop comment names both). Its map and
+  touchpad size may differ ([KEYBOARDS.md](KEYBOARDS.md)); untested here.
+
 ## How to reproduce
 
 1. Developer options → Enable Bluetooth HCI snoop log → **Enabled** (full), then toggle Bluetooth.
