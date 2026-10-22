@@ -142,8 +142,24 @@ Build 1 behaves the same: after its fresh pairing at 15:42:47, every connection 
 (15:42:25). Once, at 15:41:59, the keyboard itself asked for 7.5 ms (an LL connection parameter
 request) and got it. That didn't happen again in any later connection, so it can't be relied on.
 
+### Why: this is AOSP's own behaviour
+
+In AOSP's HID-over-GATT host (`system/bta/hh/bta_hh_le.cc`, main, checked 2026-10-22), the
+keyboard's preferred parameters are read in exactly one place: `bta_hh_le_srvc_search_cmpl`, at the
+end of a service discovery, which calls `read_pref_conn_params_cb`. That callback raises a maximum
+below 11.25 ms to 11.25 ms (`L2CA_AdjustConnectionIntervals`, `BTM_BLE_CONN_INT_MIN_LIMIT` = 9),
+which gives the **7.5–11.25 ms, latency 25** seen in the snoops. It stores the values with
+`BTM_BleSetPrefConnParams` and requests them.
+
+A paired keyboard doesn't get a service discovery when it reconnects: `bta_hh_security_cmpl` loads
+the cached reports (`HidReport` in `bt_config.conf`) and skips discovery ("Cache found, no need to
+perform service discovery"). The values stored by `BTM_BleSetPrefConnParams` live in the in-memory
+device record (`p_dev_rec->conn_params`), which isn't saved with the pairing. So reconnects in the
+same boot get 7.5 ms, and after a reboot nothing reads the parameters again. This ROM runs that
+code unchanged as far as the snoops show, so it applies to any ROM.
+
 Before this ROM, the module's companion app requested Android's high-priority interval on every
-connection, so reboots didn't matter.
+connection, so reboots didn't matter as much (15 ms instead of 7.5 ms).
 
 ## Module v0.12 on these ROMs
 
@@ -154,48 +170,57 @@ package manager runs. `ROM_NATIVE` in `config.sh` can force the mode (`yes`/`no`
 If the file is there, the module:
 
 - doesn't edit the report map, at boot or at uninstall, and never restarts Bluetooth;
-- doesn't pair the keyboard or change the HID policy (`OplusKeyboard` does both);
-- on each detach starts the latency helper, which stops on attach. The helper watches the link's
-  interval (Android reports every change to every GATT client on the link). Three seconds after
-  connecting, it requests the high-priority interval **only if the link is slower than 15 ms**. So
-  it lifts a 45 ms link to 15 ms, and leaves the keyboard's 7.5 ms alone after a fresh pairing;
-- logs, and shows under the Action button, whether the ROM sets the touchpad resolution;
-- at uninstall, leaves the HID policy alone too (the ROM forbids HID while the keyboard is docked).
+- doesn't pair the keyboard or change the HID policy (`OplusKeyboard` does both), at uninstall
+  either (the ROM forbids HID while the keyboard is docked);
+- on each detach runs `HidCtl tune` (below) and starts the latency helper; both stop on attach;
+- logs, and shows under the Action button, whether the ROM sets the touchpad resolution.
+
+The connection-interval part runs in both modes (it also helps on ROMs without `OplusKeyboard`):
+
+- **`HidCtl tune`** (root, via `app_process`) waits for the keyboard to be paired and connected,
+  reads its preferred parameters itself (the GAP service isn't walled off like the HID service), and
+  after 3 s, if the link is slower than the keyboard's maximum, requests them with the same
+  adjustment Android makes, through the hidden `BluetoothGatt.requestLeConnectionUpdate`. That call
+  is hidden from apps (an app gets `NoSuchMethodException`), which is why it runs as root. The link
+  keeps the parameters after this client closes. In effect it does on every detach what Android
+  does only at pairing.
+- **The latency helper** (the app) is the fallback: it watches the link's interval (Android reports
+  every change to every GATT client on the link) and, 6 s after connecting, requests Android's
+  high-priority interval (11.25–15 ms) only if the link is still slower than 15 ms. It also covers
+  reconnects between detaches.
 
 A map that an older module version (v0.11 or earlier, run on such a ROM) already edited keeps its
 touchpad size correction. That's harmless: it gives the same 23 units/mm the ROM's IDC file sets,
 and on a build without that IDC fix (like `20261022-1057`) it's what makes the speed right.
 
-Tested on build 2 (2026-10-22): after a reboot the module detected the ROM (`latency only; touchpad
-resolution set by the ROM`), and at the first detach after boot moved the link from 45 ms to 15 ms
-by itself:
-```
-17:08:12.189 interval now 45.0 ms
-17:11:54.123 TABLET asks 11.25-15.0 ms, latency 1      <- the module (Android's high priority)
-17:11:54.644 interval now 15.0 ms, latency 1
-```
-Then a reboot, a detach, and a fresh pairing with the module running:
+### Tests on build 2 (2026-10-22)
 
-| Time | Situation | Interval | Touchpad delivery |
-|---|---|---|---|
-| 17:13:06 | First detach after the 17:13 reboot | 45 ms → **15 ms** (module) | 1.8 per delivery, every 15 ms |
-| 17:15:55 | Forgotten and paired again; the helper waited for the pairing (bond state 11 at the detach) | **7.5 ms** (Android, from the keyboard's parameters); the helper logged `BLE interval already 7.5 ms; not requesting high priority` | 1.2 per delivery, every 7.6 ms |
+| Time | Module | Situation | Interval | Touchpad delivery |
+|---|---|---|---|---|
+| 17:11:54 | high priority only | Detach after the 17:06 reboot | 45 ms → 15 ms | |
+| 17:13:06 | high priority only | First detach after the 17:13 reboot | 45 ms → 15 ms | 1.8 per delivery, every 15 ms |
+| 17:15:55 | high priority only | Forgotten and paired again; the helper waited for the pairing (bond state 11 at the detach) | **7.5 ms** (Android); the helper logged `BLE interval already 7.5 ms; not requesting high priority` | 1.2 per delivery, every 7.6 ms |
+| 17:28:57 | with `HidCtl tune` | Keyboard detached through the 17:28 reboot | 45 ms → **7.5 ms**, latency 25 (`hidctl tune: rc=0 tune: interval now 7.5 ms, latency 25`); the helper logged `already 7.5 ms` | 1.5 per delivery, every 7.7 ms; 116 reports/s while moving |
 
-Android's high priority is 11.25–15 ms, not the keyboard's 7.5 ms. The public API has nothing
-faster, and the call that sets exact parameters is hidden.
+```
+17:28:07.992 interval now 45.0 ms                      (connection made at boot)
+17:28:57.302 TABLET asks 7.5-11.25 ms, latency 25      <- HidCtl tune, the keyboard's own parameters
+17:28:57.768 interval now 7.5 ms, latency 25
+```
+
+Uninstall on build 2 left the stored report map byte-identical (same 563 bytes), removed the app,
+its whitelist entry and the module's state, and didn't touch the HID policy.
 
 ## Open leads
 
-- **The reboot loss belongs upstream.** Android's Bluetooth stack could re-read the keyboard's
-  preferred parameters when it reconnects (or keep them with the bond), which would give 7.5 ms on
-  every connection without any app. The snoops above show the exact sequence. Not yet checked:
-  whether this is AOSP behaviour or specific to this ROM's stack.
-- **`OplusKeyboard` could request it.** A GATT client opened by the app can ask for a faster
-  interval (Android only walls off the HID service itself, not the link), which is what the module
-  does.
-- **Matching 7.5 ms exactly from the module** would need the hidden
-  `BluetoothGatt.requestLeConnectionUpdate`. Not tried.
-
+- **Fix the reboot loss in AOSP.** `bta_hh_security_cmpl` could still read the GAP preferred
+  parameters when it uses the cached reports (one characteristic read), or the parameters could be
+  saved with the pairing like the reports are. Either would give every HOGP device its preferred
+  interval after a reboot, with no module. The analysis above is the basis for a bug report.
+- **`OplusKeyboard` could do what `HidCtl tune` does.** It's built with `certificate: "platform"`
+  and `platform_apis: true` (its `Android.bp`), so it can call `requestLeConnectionUpdate`
+  directly: after connecting on detach, read GAP `0x2a04` and request those parameters. That would
+  cover this ROM without the module.
 ## How to reproduce
 
 1. Developer options → Enable Bluetooth HCI snoop log → **Enabled** (full), then toggle Bluetooth.

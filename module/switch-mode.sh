@@ -50,12 +50,14 @@ if rom_native; then
     case "$MODE" in
         attached)
             log "pogo attached (${SRC:-?}) -> stop latency client (ROM handles HID)"
+            stop_tune
             am stopservice --user 0 -n "$APP_PKG/.LatencyService" >/dev/null 2>&1
             ;;
         detached)
             log "pogo detached (${SRC:-?}) -> start latency client for $KBD_MAC (ROM handles HID)"
             am broadcast --user 0 -a "$APP_PKG.PAIR" -n "$APP_PKG/.PairReceiver" \
                 --es mac "$KBD_MAC" --ez pair false >/dev/null 2>&1
+            tune_link
             ;;
     esac
     exit 0
@@ -64,6 +66,7 @@ fi
 case "$MODE" in
     attached)
         log "pogo attached (${SRC:-?}) -> suspend BLE HID for $KBD_MAC"
+        stop_tune
         am stopservice --user 0 -n "$APP_PKG/.LatencyService" >/dev/null 2>&1
         hidctl suspend "$KBD_MAC"
         ;;
@@ -72,5 +75,6 @@ case "$MODE" in
         hidctl resume "$KBD_MAC"
         am broadcast --user 0 -a "$APP_PKG.PAIR" -n "$APP_PKG/.PairReceiver" \
             --es mac "$KBD_MAC" >/dev/null 2>&1
+        tune_link
         ;;
 esac

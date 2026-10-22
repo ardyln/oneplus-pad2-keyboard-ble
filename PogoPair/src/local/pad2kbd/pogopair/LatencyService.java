@@ -18,15 +18,18 @@ import android.util.Log;
  *
  * Android connects at ~45 ms and only switches to the keyboard's preferred 7.5 ms after it has read
  * the keyboard's preferred connection parameters, which it does at pairing and forgets at reboot
- * (docs/ROM-NATIVE.md). So this waits for the stack to settle and requests the high-priority
- * interval (11.25-15 ms) only when the link is still slower than that; a faster link is left alone.
+ * (docs/ROM-NATIVE.md). On each detach the module's root helper ("HidCtl tune") applies them; this
+ * is the fallback for when it can't, and for reconnects in between: after the stack and the helper
+ * have settled, it requests the high-priority interval (11.25-15 ms) only when the link is still
+ * slower than that. A faster link is left alone.
  * The MAC arrives as an intent extra and is remembered so a sticky restart (null intent) still works.
  */
 public final class LatencyService extends Service {
     private static final String TAG = PairReceiver.TAG;
     private static final long MAX_RETRY_MS = 30000;
     // Time for the stack's own updates after a connect (45 ms first, the keyboard's 7.5 ms ~1 s later)
-    private static final long SETTLE_MS = 3000;
+    // and for "HidCtl tune" (applies the keyboard's parameters ~3.5 s after it connects)
+    private static final long SETTLE_MS = 6000;
     // CONNECTION_PRIORITY_HIGH's slowest interval (12 x 1.25 ms = 15 ms, AOSP default)
     private static final int HIGH_MAX_INTERVAL = 12;
     private static final int MAX_REQUESTS_PER_CONNECTION = 3;

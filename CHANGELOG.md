@@ -8,9 +8,12 @@
   either); the ROM does that.
   `ROM_NATIVE` in `config.sh` can force either mode. The Action button shows the mode, and whether
   the ROM sets the touchpad resolution. Details: `docs/ROM-NATIVE.md`.
-- The latency helper now only requests the high-priority interval when the link is slower than
-  15 ms, so it no longer slows down a link that already runs at the keyboard's own 7.5 ms (Android
-  sets that after a fresh pairing).
+- **Touchpad latency: the keyboard's own 7.5 ms on every detach.** Android applies the keyboard's
+  preferred connection parameters (7.5 ms) only at pairing and forgets them at reboot, so the link
+  fell back to 45 ms (an AOSP behaviour, see `docs/ROM-NATIVE.md`). On each detach the root helper
+  (`HidCtl tune`) now reads those parameters from the keyboard and applies them the way Android
+  does at pairing. The app's high-priority request (11.25-15 ms) is now only the fallback, and only
+  when the link is slower than 15 ms, so it no longer slows down a faster link.
 - **Fix:** on a fresh install, Android blocked the latency helper from starting in the background
   until the next reboot. The module whitelisted the app before installing it.
 - New: `tools/btsnoop_kbd.py`, which reads an HCI snoop log: connection-interval timeline, how the

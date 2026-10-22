@@ -17,6 +17,7 @@ import java.lang.reflect.Method;
  *   resume  MAC  policy ALLOWED + connect        (keyboard detached)
  *   allow   MAC  policy ALLOWED only             (uninstall)
  *   status  MAC  print policy, connection and bond state
+ *   tune    MAC  apply the keyboard's preferred BLE connection parameters (see LinkTuner)
  */
 public final class HidCtl {
     private static final String TAG = "pad2kbd";
@@ -24,8 +25,8 @@ public final class HidCtl {
 
     public static void main(String[] args) throws Exception {
         final String cmd = args.length == 2 ? args[0] : "";
-        if (!cmd.matches("suspend|resume|allow|status") || !BluetoothAdapter.checkBluetoothAddress(args[1])) {
-            System.err.println("usage: HidCtl suspend|resume|allow|status MAC");
+        if (!cmd.matches("suspend|resume|allow|status|tune") || !BluetoothAdapter.checkBluetoothAddress(args[1])) {
+            System.err.println("usage: HidCtl suspend|resume|allow|status|tune MAC");
             System.exit(2);
         }
         Looper.prepareMainLooper();
@@ -59,6 +60,10 @@ public final class HidCtl {
         constructor.setAccessible(true);
         final BluetoothAdapter adapter = constructor.newInstance(manager, context);
         final BluetoothDevice device = adapter.getRemoteDevice(args[1]);
+        if ("tune".equals(cmd)) {
+            new LinkTuner(context, device).run();   // exits the process itself
+            return;
+        }
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             System.out.println(cmd + ": timeout waiting for HID_HOST proxy");
             System.exit(3);

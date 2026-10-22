@@ -79,6 +79,18 @@ hidctl() {
     return $_rc
 }
 
+# Gives the keyboard its own preferred BLE parameters (7.5 ms) in the background, one run at a
+# time; "HidCtl tune" waits for the pairing and the connection itself (docs/ROM-NATIVE.md).
+tune_link() {
+    mkdir "$STATE_DIR/tune.lock" 2>/dev/null || { log "tune already running"; return 0; }
+    ( hidctl tune "$KBD_MAC"; rmdir "$STATE_DIR/tune.lock" ) </dev/null >/dev/null 2>&1 &
+}
+
+stop_tune() {
+    pkill -f 'pogopair.HidCtl tune' 2>/dev/null
+    rmdir "$STATE_DIR/tune.lock" 2>/dev/null
+}
+
 # Installs an APK as a normal app and prints the install's output.
 # - Android may ask the user to allow the install and shows one such prompt at a time, so the Pad 2
 #   modules take turns (a lock shared by both), and each install gets 5 minutes.
