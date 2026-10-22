@@ -159,7 +159,12 @@ If the file is there, the module:
   interval (Android reports every change to every GATT client on the link). Three seconds after
   connecting, it requests the high-priority interval **only if the link is slower than 15 ms**. So
   it lifts a 45 ms link to 15 ms, and leaves the keyboard's 7.5 ms alone after a fresh pairing;
-- logs, and shows under the Action button, whether the ROM sets the touchpad resolution.
+- logs, and shows under the Action button, whether the ROM sets the touchpad resolution;
+- at uninstall, leaves the HID policy alone too (the ROM forbids HID while the keyboard is docked).
+
+A map that an older module version (v0.11 or earlier, run on such a ROM) already edited keeps its
+touchpad size correction. That's harmless: it gives the same 23 units/mm the ROM's IDC file sets,
+and on a build without that IDC fix (like `20261022-1057`) it's what makes the speed right.
 
 Tested on build 2 (2026-10-22): after a reboot the module detected the ROM (`latency only; touchpad
 resolution set by the ROM`), and at the first detach after boot moved the link from 45 ms to 15 ms

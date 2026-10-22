@@ -10,7 +10,8 @@ analysis and this repo were produced with an AI assistant (Claude); the upstream
 as AI-generated too.
 
 > **Status:** works on the author's tablet. Use at your own risk. The module edits
-> `/data/misc/bluedroid/bt_config.conf` (with a backup, and undone on uninstall).
+> `/data/misc/bluedroid/bt_config.conf` (with a backup, and undone on uninstall), except on ROMs
+> that handle the keyboard themselves (below), where it leaves that file alone.
 > Upstream has no license file, and this repository is published with permission from the upstream author without incorporating a license.
 
 ## What it does

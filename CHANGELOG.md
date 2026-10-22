@@ -4,7 +4,8 @@
 - **ROMs that handle the keyboard themselves:** if the ROM ships `OplusKeyboard`
   (`org.lineageos.keyboard`, e.g. inferno0230's PixelOS 17 builds from 2026-10-22), the module
   only keeps the Bluetooth link fast. It no longer edits the report map (at boot or at uninstall),
-  restarts Bluetooth, pairs the keyboard or switches the HID policy there; the ROM does that.
+  restarts Bluetooth, pairs the keyboard or switches the HID policy there (uninstalling doesn't
+  either); the ROM does that.
   `ROM_NATIVE` in `config.sh` can force either mode. The Action button shows the mode, and whether
   the ROM sets the touchpad resolution. Details: `docs/ROM-NATIVE.md`.
 - The latency helper now only requests the high-priority interval when the link is slower than
